@@ -39,6 +39,19 @@ class Config(BaseSettings):
     snapshot_interval_s: float = 3.0  # au plus une capture toutes les N secondes pendant un mouvement
     publish_interval_s: float = 2.0  # republication pendant le mouvement : garde la caméra déverrouillée
 
+    # Suivi : le servo de l'UNO Q oriente la caméra vers le mouvement (tracking.py). Vide = caméra fixe.
+    servo_api_url: str = ""  # ex. http://talos.local:8000 (même API que SENSOR_API_URL du backend)
+    track_fov_deg: float = 60.0  # champ de vision horizontal de l'ESP32-CAM (OV2640, objectif d'origine)
+    track_deadband: float = 0.15  # pas de rotation si le sujet est à moins de 15 % du centre (demi-largeur)
+    track_gain: float = 0.8  # part de l'écart corrigée à chaque rotation (< 1 : pas d'oscillation)
+    track_speed: int = 150  # vitesse de rotation en °/s
+    track_settle_s: float = 0.6  # attente après la rotation, le temps que l'image se stabilise
+    track_min_interval_s: float = 1.0  # au plus une rotation par seconde
+    track_relearn_frames: int = 8  # apprentissage du fond après une rotation
+    track_invert: bool = False  # true si la caméra tourne dans le mauvais sens
+    track_home_angle: int = 90  # position de repos
+    track_home_after_s: float = 20.0  # retour au repos sans mouvement (0 = jamais)
+
     @field_validator("mqtt_ca", "mqtt_cert", "mqtt_key", "snapshot_dir")
     @classmethod
     def relative_to_vision(cls, p: Path) -> Path:

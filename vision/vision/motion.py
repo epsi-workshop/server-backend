@@ -14,6 +14,7 @@ MASKED_STD = 6.0  # écart-type des niveaux de gris en dessous duquel l'image es
 
 RED = (40, 40, 230)
 WHITE = (255, 255, 255)
+AMBER = (20, 170, 240)
 
 
 @dataclass
@@ -35,6 +36,15 @@ class MotionDetector:
         self.history: deque[bool] = deque(maxlen=window)
         self.bg = cv2.createBackgroundSubtractorMOG2(history=300, varThreshold=32, detectShadows=True)
         self.kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+
+    def relearn(self, frames: int) -> None:
+        """Repart d'un fond vierge (la caméra vient de tourner) avec un court apprentissage de `frames` images.
+
+        Un MOG2 neuf apprend vite ses premières images ; l'historique de confirmation est conservé, pour
+        que l'état « mouvement » ne retombe pas pendant un suivi.
+        """
+        self.bg = cv2.createBackgroundSubtractorMOG2(history=300, varThreshold=32, detectShadows=True)
+        self.frames = max(0, self.warmup - frames)
 
     def update(self, frame: np.ndarray) -> MotionResult:
         h, w = frame.shape[:2]
@@ -70,14 +80,24 @@ class MotionDetector:
         )
 
 
-def annotate(frame: np.ndarray, result: MotionResult, now: datetime) -> np.ndarray:
-    """Copie de l'image avec les zones en mouvement encadrées et l'horodatage."""
+def annotate(frame: np.ndarray, result: MotionResult, now: datetime,
+             tracking: str | None = None, focus: Box | None = None) -> np.ndarray:
+    """Copie de l'image avec les zones en mouvement encadrées, l'horodatage et l'état du suivi.
+
+    tracking : texte affiché à droite du bandeau (ex. « SUIVI 72° ») ; focus : zone suivie.
+    """
     out = frame.copy()
     for x, y, w, h in result.boxes:
         cv2.rectangle(out, (x, y), (x + w, y + h), RED, 2)
+    if focus is not None:
+        x, y, w, h = focus
+        cv2.drawMarker(out, (x + w // 2, y + h // 2), AMBER, cv2.MARKER_CROSS, 24, 2)
     label = now.strftime("%d/%m/%Y %H:%M:%S")
     if result.moving:
         label += "  MOUVEMENT"
     cv2.rectangle(out, (0, 0), (out.shape[1], 22), (0, 0, 0), -1)
     cv2.putText(out, label, (6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, RED if result.moving else WHITE, 1, cv2.LINE_AA)
+    if tracking:
+        (tw, _), _ = cv2.getTextSize(tracking, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 1)
+        cv2.putText(out, tracking, (out.shape[1] - tw - 6, 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, AMBER, 1, cv2.LINE_AA)
     return out

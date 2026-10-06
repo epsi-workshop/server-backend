@@ -34,6 +34,27 @@ Tests : `pytest`.
 
 Trop de déclenchements (reflets, écran dans le champ) : augmenter `MOTION_MIN_AREA` (0.01) ou `MOTION_CONFIRM`.
 
+## Suivi du mouvement (servo)
+
+Avec `SERVO_API_URL` (ex. `http://talos.local:8000`), la caméra montée sur le servo de l'UNO Q
+pivote vers le mouvement : en caméra fixe, c'est en général la personne qui se déplace.
+
+1. À chaque mouvement confirmé, on prend la **plus grande zone** en mouvement et son écart au centre.
+2. Au-delà de `TRACK_DEADBAND` (15 % de la demi-largeur), l'écart est converti en angle avec le champ
+   de vision `TRACK_FOV_DEG` (60°) et le gain `TRACK_GAIN` (0,8 : pas d'oscillation), puis envoyé par
+   `POST /servo/{angle}?speed=TRACK_SPEED` (thread dédié : l'analyse n'attend jamais l'API).
+3. Pendant la rotation et `TRACK_SETTLE_S` de stabilisation, la détection est **gelée** (l'image entière
+   bouge) ; l'état « mouvement » est conservé pour ne pas couper l'alerte. Le fond est ensuite
+   **réappris** sur `TRACK_RELEARN_FRAMES` images à la nouvelle position.
+4. Au plus une rotation par `TRACK_MIN_INTERVAL_S` ; retour à `TRACK_HOME_ANGLE` (90°) après
+   `TRACK_HOME_AFTER_S` sans mouvement, et au démarrage.
+
+Le flux annoté affiche l'angle (« SUIVI 72 deg », « ... » pendant une rotation) et une croix sur la zone suivie.
+
+Réglages : la caméra part du mauvais côté → `TRACK_INVERT=true` ; elle oscille → baisser `TRACK_GAIN`
+ou augmenter `TRACK_DEADBAND` ; elle réagit trop tard → augmenter `TRACK_SPEED` (600 au plus).
+Servo injoignable : une ligne dans le journal, la détection continue en caméra fixe.
+
 ## Message publié
 
 ```json

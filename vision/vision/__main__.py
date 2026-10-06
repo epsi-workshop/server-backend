@@ -1,16 +1,18 @@
 """Service vision : python -m vision"""
 import logging
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 
 import cv2
 
 from .config import VERSION, config
-from .motion import MotionDetector, annotate
+from .motion import MotionDetector, MotionResult, annotate
 from .publisher import Publisher
 from .source import camera_frames
 from .stream import FrameHub, serve
+from .tracking import ServoClient, Tracker, largest
 
 log = logging.getLogger("vision")
 JPEG_QUALITY = [cv2.IMWRITE_JPEG_QUALITY, 80]
@@ -38,11 +40,45 @@ def main() -> None:
     last_snapshot = last_publish = 0.0
     was_moving = was_masked = False
 
+    tracker = servo = None
+    if config.servo_api_url:
+        servo = ServoClient(config.servo_api_url)
+        tracker = Tracker(
+            fov_deg=config.track_fov_deg, deadband=config.track_deadband, gain=config.track_gain,
+            speed=config.track_speed, settle_s=config.track_settle_s, min_interval_s=config.track_min_interval_s,
+            invert=config.track_invert, home_angle=config.track_home_angle,
+            home_after_s=config.track_home_after_s, now=time.monotonic(),
+        )
+        # Position de départ connue : retour au repos, sans attendre la réponse de l'API.
+        servo.move(tracker.home(time.monotonic()), config.track_speed)
+        log.info("Suivi actif : servo %s, repos à %d°", config.servo_api_url, tracker.angle)
+    relearn_pending = False
+
     try:
         for frame in camera_frames(config.camera_url, config.camera_user, config.camera_password):
             now = datetime.now()
-            result = detector.update(frame)
-            ok, buf = cv2.imencode(".jpg", annotate(frame, result, now), JPEG_QUALITY)
+            mono = time.monotonic()
+            focus = None
+            if tracker and tracker.frozen(mono):
+                # Caméra en rotation : l'image entière bouge, la détection n'a pas de sens.
+                # L'état « mouvement » est conservé pour ne pas interrompre l'alerte en cours.
+                result = MotionResult(moving=was_moving, raw=False)
+                relearn_pending = True
+            else:
+                if relearn_pending:
+                    detector.relearn(config.track_relearn_frames)
+                    relearn_pending = False
+                result = detector.update(frame)
+                if tracker:
+                    boxes = result.boxes if result.moving else []
+                    focus = largest(boxes)
+                    target = tracker.update(mono, boxes, frame.shape[1])
+                    if target is not None:
+                        servo.move(target, config.track_speed)
+            label = None  # OpenCV n'affiche pas « ° »
+            if tracker:
+                label = f"SUIVI {tracker.angle} deg" + (" ..." if tracker.frozen(mono) else "")
+            ok, buf = cv2.imencode(".jpg", annotate(frame, result, now, label, focus), JPEG_QUALITY)
             if not ok:
                 continue
             jpeg = buf.tobytes()
