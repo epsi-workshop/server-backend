@@ -1,0 +1,35 @@
+# Captures de la caméra (service vision) : données de surveillance, jamais dans le dépôt.
+snapshots/
+
+# Toute image, où qu'elle soit (captures copiées ailleurs, tests). Pour versionner une image
+# voulue (logo…), l'ajouter explicitement ici avec une ligne !chemin/vers/image.png
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.webp
+
+# Secrets : configuration locale, PKI (clés privées et certificats)
+.env
+gateway.env
+pki/
+certs/
+*.key
+*.pem
+*.crt
+*.p12
+
+# Python et Node (complète les .gitignore des sous-dossiers)
+__pycache__/
+.venv/
+*.egg-info/
+.pytest_cache/
+node_modules/
+
+# Journaux, éditeurs, système
+*.log
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
