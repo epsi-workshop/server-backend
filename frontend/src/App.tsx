@@ -8,6 +8,7 @@ import Overview from "./pages/Overview";
 import Camera from "./pages/Camera";
 import Alerts from "./pages/Alerts";
 import type { Role } from "./types";
+import { Logo3DSlot, ViewsCanvas } from "./three/Views";
 
 // Pages chargées à la demande : Recharts (historique) et l'administration pèsent lourd
 // et ne servent pas à l'écran principal.
@@ -22,7 +23,7 @@ function Guard({ min, children }: { min: Role; children: ReactNode }) {
 
 function Gate() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="login"><p className="empty">Chargement…</p></div>;
+  if (loading) return <div className="login"><div className="boot"><Logo3DSlot className="boot-logo" /><p className="boot-text">Germination du système</p></div></div>;
   if (!user) return <Login />;
   if (user.mustChangePassword) return <ChangePassword forced />;
   return (
@@ -49,6 +50,7 @@ export default function App() {
       <AuthProvider>
         <HashRouter><Gate /></HashRouter>
       </AuthProvider>
+      <ViewsCanvas />
     </ToastProvider>
   );
 }

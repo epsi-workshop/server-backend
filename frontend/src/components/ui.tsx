@@ -1,12 +1,23 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Point } from "../types";
 import { errMsg } from "../util";
+import { Icon3DSlot } from "../three/Views";
+import type { IconKind } from "../three/Objects";
 
-export function Panel(props: { title: string; action?: ReactNode; children: ReactNode; className?: string; tone?: "ok" | "warn" | "crit" }) {
+/** Panneau en verre : coins de visée, icône 3D facultative, inclinaison vers la souris (profondeur). */
+/** Panneau à fond plein, icône 3D facultative à gauche du titre. */
+export function Panel(props: {
+  title: string; action?: ReactNode; children: ReactNode; className?: string; tone?: "ok" | "warn" | "crit";
+  icon?: IconKind; iconValue?: number;
+}) {
+  const iconTone = props.tone === "crit" ? "crit" : props.tone === "warn" ? "warn" : "ok";
   return (
     <section className={`panel ${props.tone ? `panel-${props.tone}` : ""} ${props.className ?? ""}`}>
       <header className="panel-head">
-        <h2>{props.title}</h2>
+        <div className="panel-title">
+          {props.icon && <Icon3DSlot kind={props.icon} tone={iconTone} value={props.iconValue} className="panel-icon" />}
+          <h2>{props.title}</h2>
+        </div>
         {props.action}
       </header>
       <div className="panel-body">{props.children}</div>

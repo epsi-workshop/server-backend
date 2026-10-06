@@ -27,14 +27,15 @@ export default function Camera() {
 
   return (
     <div className="stack">
-      <Panel title="Flux en direct" tone={open ? "crit" : undefined}
+      <Panel title="Flux en direct" icon="camera" tone={open ? "crit" : undefined}
         action={open ? <span className="live-pill">{overrideLeft > 0 ? `accès forcé, ${overrideLeft} s restantes` : "détection en cours"}</span> : undefined}>
         {!c.online ? (
           <div className="cam-locked"><Lock size={36} /><strong>Caméra hors ligne</strong><span>Dernière détection {ago(c.lastDetection?.ts)}. Vérifiez l'alimentation de l'ESP32-CAM.</span></div>
         ) : open ? (
           <div className="feed">
+            <span className="feed-live">En direct</span>
             {api.streamUrl()
-              ? <img src={api.streamUrl()!} alt="Flux vidéo annoté de la salle serveur" />
+              ? <LiveStream url={api.streamUrl()!} />
               : <Suspense fallback={null}><MockFeed /></Suspense>}
           </div>
         ) : (
@@ -95,5 +96,29 @@ function ZoomDialog({ alert, onClose }: { alert: Alert | null; onClose: () => vo
         </>
       )}
     </dialog>
+  );
+}
+
+const RETRY_MS = 2000;
+
+/**
+ * Flux MJPEG qui se reconnecte seul : une balise <img> en erreur (caméra pas encore joignable,
+ * service vision redémarré) ne réessaie jamais d'elle-même. Un paramètre change à chaque essai
+ * pour forcer une nouvelle requête.
+ */
+function LiveStream({ url }: { url: string }) {
+  const [attempt, setAttempt] = useState(0);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (!failed) return;
+    const t = setTimeout(() => { setFailed(false); setAttempt((n) => n + 1); }, RETRY_MS);
+    return () => clearTimeout(t);
+  }, [failed]);
+  const src = attempt ? `${url}${url.includes("?") ? "&" : "?"}r=${attempt}` : url;
+  return (
+    <>
+      <img key={attempt} src={src} alt="Flux vidéo annoté de la salle serveur" onError={() => setFailed(true)} />
+      {failed && <span className="feed-retry">Reconnexion au flux…</span>}
+    </>
   );
 }

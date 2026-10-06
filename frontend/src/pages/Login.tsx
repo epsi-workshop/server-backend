@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { api } from "../api";
 import { useAuth } from "../store";
-import { Logo } from "../components/ui";
+import { Logo3DSlot } from "../three/Views";
 import { errMsg } from "../util";
 
 export default function Login() {
@@ -17,11 +17,13 @@ export default function Login() {
   };
   return (
     <div className="login">
+      <div className="login-hero">
+        <Logo3DSlot className="login-logo" />
+        <h1 className="login-title">Sentinel</h1>
+        <p className="login-sub">Surveillance discrète, cultivée au cœur de la salle serveur.</p>
+      </div>
       <form className="login-card" onSubmit={submit}>
-        <div className="brand brand-login">
-          <Logo size={34} />
-          <div><strong>Sentinel-X</strong><span>Supervision de la salle serveur</span></div>
-        </div>
+        <div className="login-card-head">Connexion</div>
         <label className="field"><span>Identifiant</span>
           <input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoFocus required /></label>
         <label className="field"><span>Mot de passe</span>

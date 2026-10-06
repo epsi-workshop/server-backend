@@ -3,6 +3,7 @@ import { Lock, Video } from "lucide-react";
 import { useLive } from "../store";
 import { Dot, Empty, Loading, Panel, Sparkline } from "../components/ui";
 import { LEVEL_LABEL, ago, cameraOpen, fmtDuration, fmtNum, overrideLeftS } from "../util";
+import { PotSlot } from "../three/Views";
 
 const DIST_MAX = 250;
 const DIST_THRESHOLD = 50;
@@ -20,7 +21,19 @@ export default function Overview() {
 
   return (
     <div className="grid">
-      <Panel title="Température" className="span-4" tone={an.isAnomaly ? "warn" : undefined}>
+      <Panel title="Pot sentinelle" className="span-4 row-2" tone={!d.online ? "crit" : s.pir.active ? "warn" : undefined}>
+        <PotSlot className="pot-view" state={{ online: d.online, motion: s.pir.active, cameraLive: camOpen }} />
+        <p className="pot-caption">Le boîtier, camouflé en plante d'intérieur.</p>
+        <dl className="facts pot-legend">
+          <div><dt>Feuillage<small>caméra + servo</small></dt><dd><Dot tone={!c.online ? "crit" : camOpen ? "warn" : "ok"} />{!c.online ? "Hors ligne" : camOpen ? "En direct" : "En veille"}</dd></div>
+          <div><dt>Pétale infrarouge<small>PIR</small></dt><dd><Dot tone={s.pir.active ? "warn" : "ok"} />{s.pir.active ? "Mouvement" : "Calme"}</dd></div>
+          <div><dt>Sève<small>DHT22</small></dt><dd>{fmtNum(s.temperature.value)} °C · {fmtNum(s.humidity.value, 0)} %</dd></div>
+          <div><dt>Veille<small>système</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armée" : "Désarmée"}</dd></div>
+          <div><dt>Racines<small>UNO Q</small></dt><dd><Dot tone={d.online ? "ok" : "crit"} />{d.online ? `En ligne · ${fmtDuration(d.uptimeS)}` : "Muet"}</dd></div>
+        </dl>
+      </Panel>
+
+      <Panel title="Température" className="span-4" icon="temperature" iconValue={Math.min(1, Math.max(0, (s.temperature.value - 10) / 30))} tone={an.isAnomaly ? "warn" : undefined}>
         <div className="readout">
           <span className="readout-value">{fmtNum(s.temperature.value)}</span>
           <span className="readout-unit">°C</span>
@@ -32,7 +45,7 @@ export default function Overview() {
         </dl>
       </Panel>
 
-      <Panel title="Humidité" className="span-4">
+      <Panel title="Humidité" className="span-4" icon="humidity">
         <div className="readout">
           <span className="readout-value">{fmtNum(s.humidity.value)}</span>
           <span className="readout-unit">%</span>
@@ -44,7 +57,7 @@ export default function Overview() {
         </dl>
       </Panel>
 
-      <Panel title="Caméra" className="span-4" tone={camOpen ? "crit" : undefined}
+      <Panel title="Caméra" className="span-4" icon="camera" tone={camOpen ? "crit" : undefined}
         action={camOpen ? <Link className="btn btn-small btn-primary" to="/camera"><Video size={15} />Voir le flux</Link> : undefined}>
         <div className={`cam-state ${camOpen ? "cam-open" : ""}`}>
           {camOpen ? <Video size={30} aria-hidden="true" /> : <Lock size={30} aria-hidden="true" />}
@@ -59,7 +72,7 @@ export default function Overview() {
         </dl>
       </Panel>
 
-      <Panel title="Présence (PIR)" className="span-3" tone={s.pir.active ? "warn" : undefined}>
+      <Panel title="Présence (PIR)" className="span-4" icon="pir" tone={s.pir.active ? "warn" : undefined}>
         <div className="big-state">
           <Dot tone={s.pir.active ? "warn" : "ok"} />
           <strong>{s.pir.active ? "Mouvement en cours" : "Aucun mouvement"}</strong>
@@ -70,7 +83,7 @@ export default function Overview() {
         </dl>
       </Panel>
 
-      <Panel title="Proximité (ultrasons)" className="span-3" tone={tooClose ? "warn" : undefined}>
+      <Panel title="Proximité (ultrasons)" className="span-4" icon="distance" tone={tooClose ? "warn" : undefined}>
         <div className="readout readout-small">
           <span className="readout-value">{s.distance.cm}</span>
           <span className="readout-unit">cm</span>
@@ -82,7 +95,7 @@ export default function Overview() {
         <div className="gauge-scale"><span>0</span><span>seuil {DIST_THRESHOLD} cm</span><span>{DIST_MAX} cm</span></div>
       </Panel>
 
-      <Panel title="Intégrité du boîtier" className="span-3" tone={s.lid.open || s.imu.shock ? "crit" : undefined}>
+      <Panel title="Intégrité du boîtier" className="span-4" icon="integrity" tone={s.lid.open || s.imu.shock ? "crit" : undefined}>
         <dl className="facts facts-tight">
           <div><dt>Capot</dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouvert" : "Fermé"}</dd></div>
           <div><dt>Accélération</dt><dd className={s.imu.shock ? "txt-crit" : ""}>{fmtNum(s.imu.accelG, 2)} g</dd></div>
@@ -91,7 +104,7 @@ export default function Overview() {
         </dl>
       </Panel>
 
-      <Panel title="Badge (RFID)" className="span-3" tone={s.rfid.accepted === false ? "warn" : undefined}>
+      <Panel title="Badge (RFID)" className="span-4" icon="rfid" tone={s.rfid.accepted === false ? "warn" : undefined}>
         {s.rfid.ts ? (
           <>
             <div className="big-state">
@@ -107,7 +120,7 @@ export default function Overview() {
         ) : <Empty>Aucun badge présenté.</Empty>}
       </Panel>
 
-      <Panel title="Boîtier" className="span-4" tone={!d.online ? "crit" : undefined}>
+      <Panel title="Boîtier" className="span-4" icon="device" tone={!d.online ? "crit" : undefined}>
         <dl className="facts">
           <div><dt>Connexion</dt><dd><Dot tone={d.online ? "ok" : "crit"} />{d.online ? "En ligne" : "Hors ligne"}</dd></div>
           <div><dt>Dernier heartbeat</dt><dd>{ago(d.lastHeartbeat)}</dd></div>
@@ -117,7 +130,7 @@ export default function Overview() {
         </dl>
       </Panel>
 
-      <Panel title="Détection d'anomalies" className="span-4" tone={an.isAnomaly ? "warn" : undefined}>
+      <Panel title="Détection d'anomalies" className="span-4" icon="anomaly" tone={an.isAnomaly ? "warn" : undefined}>
         <div className="big-state">
           <Dot tone={an.isAnomaly ? "warn" : "ok"} />
           <strong>{an.isAnomaly ? "Comportement anormal" : "Comportement normal"}</strong>
@@ -132,7 +145,7 @@ export default function Overview() {
         </p>
       </Panel>
 
-      <Panel title="Dernières alertes" className="span-4" action={<Link className="link" to="/alertes">Tout voir</Link>}>
+      <Panel title="Dernières alertes" className="span-4" icon="alerts" action={<Link className="link" to="/alertes">Tout voir</Link>}>
         {alerts.length === 0 ? <Empty>Aucune alerte.</Empty> : (
           <ul className="mini-list">
             {alerts.slice(0, 4).map((a) => (

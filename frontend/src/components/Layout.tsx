@@ -1,9 +1,11 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Activity, Bell, Camera, KeyRound, LayoutGrid, LogOut, ScrollText, Settings2, ShieldCheck, ShieldOff } from "lucide-react";
+import { Activity, Bell, Camera, KeyRound, LayoutGrid, LogOut, Moon, ScrollText, Settings2, ShieldCheck, ShieldOff, Sun } from "lucide-react";
 import { Suspense, useState } from "react";
 import { api } from "../api";
 import { useAuth, useLive, useToast } from "../store";
-import { Confirm, Loading, Logo } from "./ui";
+import { Confirm, Loading } from "./ui";
+import { Logo3DSlot, ThreatCoreSlot, type CoreLevel } from "../three/Views";
+import { useTheme } from "../theme";
 import { ChangePasswordDialog } from "../pages/ChangePassword";
 import { LEVEL_LABEL, ROLE_LABEL, ago, cameraOpen, errMsg } from "../util";
 
@@ -24,10 +26,10 @@ export default function Layout() {
     <div className="shell">
       <aside className="side">
         <div className="brand">
-          <Logo size={28} />
+          <Logo3DSlot className="brand-logo" />
           <div>
-            <strong>Sentinel-X</strong>
-            <span>Salle serveur, boîtier box01</span>
+            <strong>Sentinel</strong>
+            <span>Pot sentinelle · box01</span>
           </div>
         </div>
         <nav className="nav">
@@ -40,12 +42,20 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+        <svg className="vine" viewBox="0 0 240 120" aria-hidden="true">
+          <path className="vine-stem" d="M-5 110 C 40 100, 60 70, 95 72 S 150 95, 180 60 S 225 30, 250 38" />
+          <path className="vine-leaf" d="M60 84 q 10 -22 30 -14 q -12 18 -30 14 Z" />
+          <path className="vine-leaf" d="M120 82 q 16 -4 22 16 q -18 2 -22 -16 Z" />
+          <path className="vine-leaf" d="M176 62 q 4 -22 26 -22 q -6 20 -26 22 Z" />
+          <circle className="vine-bud" cx="232" cy="36" r="3" />
+        </svg>
         <div className="me">
           <div>
             <strong>{user?.username}</strong>
             <span>{user && ROLE_LABEL[user.role]}{api.mode === "mock" ? " (démo)" : ""}</span>
           </div>
           <div className="me-actions">
+            <ThemeToggle />
             <button className="icon-btn" onClick={() => setPwdOpen(true)} aria-label="Changer mon mot de passe" title="Changer mon mot de passe"><KeyRound size={18} /></button>
             <button className="icon-btn" onClick={logout} aria-label="Se déconnecter" title="Se déconnecter"><LogOut size={18} /></button>
           </div>
@@ -66,13 +76,15 @@ function Annunciator() {
   const { can } = useAuth();
   const toast = useToast();
   const [confirmDisarm, setConfirmDisarm] = useState(false);
-  if (!state) return <div className="annun annun-off"><div className="annun-level"><span>Connexion au serveur…</span></div></div>;
+  const ambient: CoreLevel = !state ? "offline" : !state.device.online ? "critique" : state.threat.level;
+  if (!state) return <div className="annun annun-off"><ThreatCoreSlot level="offline" className="annun-core" /><div className="annun-level"><span>Connexion au serveur…</span></div></div>;
   const lvl = !state.device.online ? "critique" : state.threat.level;
   const arm = async () => {
     try { await api.arm(); toast("Système armé"); } catch (e) { toast(errMsg(e), "err"); }
   };
   return (
     <div className={`annun annun-${lvl}`}>
+      <ThreatCoreSlot level={ambient} className="annun-core" />
       <div className="annun-level">
         <span className="annun-word">{state.device.online ? LEVEL_LABEL[state.threat.level] : "Boîtier muet"}</span>
         <span className="annun-score">score {state.threat.score}</span>
@@ -97,5 +109,15 @@ function Annunciator() {
         confirmLabel="Désarmer" danger onClose={() => setConfirmDisarm(false)}
         onConfirm={async () => { await api.disarm(); toast("Système désarmé", "warn"); }} />
     </div>
+  );
+}
+
+function ThemeToggle() {
+  const [theme, toggle] = useTheme();
+  const label = theme === "dark" ? "Passer en thème clair" : "Passer en thème sombre";
+  return (
+    <button className="icon-btn" onClick={toggle} aria-label={label} title={label}>
+      {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
   );
 }
