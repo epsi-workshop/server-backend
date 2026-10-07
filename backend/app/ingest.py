@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import re
+import uuid
 from collections import deque
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
@@ -13,13 +14,14 @@ from typing import Annotated, Any, Literal
 from pydantic import AwareDatetime, BaseModel, Field, ValidationError
 from sqlalchemy import select
 
+from .arming import apply_armed
 from .config import config
 from .correlation import correlator
-from .db import BadgeRow, SessionLocal, events, measurements
+from .db import BadgeRow, SessionLocal, TeamMemberRow, events, measurements
 from .journal import write_log
 from .live import live
 from .mqtt import Handler
-from .schemas import Detection, Distance, Reading
+from .schemas import Detection, Distance, FaceSighting, Reading
 from .util import clean, utcnow
 
 SNAPSHOT_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}\.jpg$")
@@ -45,6 +47,7 @@ class Envelope(BaseModel):
 class VisionData(BaseModel):
     confidence: Annotated[float, Field(ge=0, le=1)]
     snapshot: Annotated[str, Field(pattern=SNAPSHOT_RE.pattern)] | None = None
+    member_id: uuid.UUID | None = None  # face_known : membre reconnu (le prénom vient de la base, pas du message)
 
 
 class TelemetryData(BaseModel):
@@ -140,6 +143,9 @@ async def on_vision_detection(topic: str, payload: bytes) -> None:
     env = await _parse(topic, payload)
     if env is None:
         return
+    if env.type in ("face_known", "face_unknown"):
+        await on_face(env)
+        return
     if env.type not in ("motion", "person"):
         await write_log("warn", "vision", f"Type de détection inconnu : {clean(env.type, 32)}")
         return
@@ -163,6 +169,40 @@ async def on_vision_detection(topic: str, payload: bytes) -> None:
     if new_episode:
         what = "Personne détectée" if env.type == "person" else "Mouvement détecté devant la caméra"
         await write_log("warn", "vision", f"{what}, flux déverrouillé"
+                        + (f", capture {data.snapshot}" if data.snapshot else ""))
+    await _update()
+
+
+async def on_face(env: Envelope) -> None:
+    """Visage vu par la caméra : membre de l'équipe reconnu, ou intrus."""
+    try:
+        data = VisionData.model_validate(env.data)
+    except ValidationError:
+        await _invalid("sentinel/vision/detection", "données de visage")
+        return
+    member = None
+    if env.type == "face_known" and data.member_id:
+        async with SessionLocal() as db:
+            member = await db.get(TeamMemberRow, data.member_id)
+            if member is not None and member.active:
+                member.last_seen = env.ts
+                await db.commit()
+            else:
+                member = None
+    known = member is not None
+    live.state.camera.last_detection = Detection(ts=env.ts, confidence=data.confidence)  # déverrouille le flux
+    live.state.camera.last_face = FaceSighting(
+        ts=env.ts, known=known, name=member.name if member else None, confidence=data.confidence,
+        snapshot_url=f"/api/snapshots/{data.snapshot}" if data.snapshot else None)
+    live.refresh()
+    await _store_event(env, {**data.model_dump(mode="json"), "name": member.name if member else None})
+    if known:
+        # Membre reconnu : même effet qu'un badge valide (score de menace atténué).
+        correlator.valid_badge_at = env.ts
+        await write_log("info", "vision", f"Visage reconnu : bonjour {member.name}")  # type: ignore[union-attr]
+    else:
+        correlator.signal("vision", env.ts, data.snapshot)
+        await write_log("critical", "vision", "Intrus détecté : visage inconnu"
                         + (f", capture {data.snapshot}" if data.snapshot else ""))
     await _update()
 
@@ -266,6 +306,11 @@ async def _on_badge(env: Envelope, uid: str) -> None:
     if accepted:
         correlator.valid_badge_at = env.ts
         await write_log("info", "boitier", f"Badge accepté : {badge.owner} ({uid})")  # type: ignore[union-attr]
+        # Badge à deux états : un passage arme et verrouille, le suivant désarme et déverrouille.
+        armed = not live.state.device.armed
+        await apply_armed(armed)
+        await write_log("info", "boitier", f"Système {'armé, porte verrouillée' if armed else 'désarmé, porte déverrouillée'} "
+                                           f"par badge ({badge.owner})")  # type: ignore[union-attr]
     else:
         correlator.signal("badge_refuse", env.ts)
         await write_log("warn", "boitier", f"Badge refusé : {'désactivé' if badge else 'UID inconnu'} {uid}")

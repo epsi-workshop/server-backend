@@ -1,5 +1,5 @@
 import type {
-  Alert, AuditEntry, Badge, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogFilter,
+  Alert, AuditEntry, Badge, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogFilter,
   Point, RestartRequest, ServiceHealth, Settings, SystemState, User,
 } from "../types";
 
@@ -41,6 +41,12 @@ export interface Api {
   createBadge(b: { uid: string; owner: string }): Promise<Badge>;
   updateBadge(id: string, patch: Partial<Pick<Badge, "active" | "owner">>): Promise<Badge>;
   deleteBadge(id: string): Promise<void>;
+
+  getTeam(): Promise<TeamMember[]>;
+  /** photo : image en data URL ; le backend refuse une photo sans visage ou avec plusieurs visages. */
+  createMember(m: { name: string; photo: string }): Promise<TeamMember>;
+  updateMember(id: string, patch: Partial<Pick<TeamMember, "active" | "name">>): Promise<TeamMember>;
+  deleteMember(id: string): Promise<void>;
 
   getSettings(): Promise<Settings>;
   saveSettings(s: Settings): Promise<Settings>;

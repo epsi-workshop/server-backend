@@ -20,7 +20,7 @@ def test_system_state_keys() -> None:
     assert set(d["device"]) == {"id", "online", "armed", "lastHeartbeat", "uptimeS", "rssi", "firmware"}
     assert set(d["sensors"]["imu"]) == {"accelG", "tiltDeg", "shock", "lastShock"}
     assert set(d["sensors"]["pir"]) == {"active", "lastTriggered", "countLastHour"}
-    assert set(d["camera"]) == {"online", "detectionActive", "lastDetection", "overrideUntil", "masked"}
+    assert set(d["camera"]) == {"online", "detectionActive", "lastDetection", "lastFace", "overrideUntil", "masked"}
     assert set(d["anomaly"]) == {"score", "isAnomaly", "projectedTemp15", "features"}
 
 

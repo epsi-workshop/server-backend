@@ -44,7 +44,11 @@ class Config(BaseSettings):
     # Captures enregistrées par le service vision (volume partagé "snapshots").
     snapshot_dir: Path = Path("/snapshots")
 
-    @field_validator("mqtt_ca", "mqtt_cert", "mqtt_key", "snapshot_dir")
+    # Reconnaissance faciale (faces.py) : modèles OpenCV Zoo et galerie lue par le service vision (volume partagé).
+    face_models_dir: Path = Path("/models")
+    faces_dir: Path = Path("/faces")
+
+    @field_validator("mqtt_ca", "mqtt_cert", "mqtt_key", "snapshot_dir", "face_models_dir", "faces_dir")
     @classmethod
     def relative_to_backend(cls, p: Path) -> Path:
         """Chemin relatif = relatif au dossier backend/, pas au dossier de lancement."""

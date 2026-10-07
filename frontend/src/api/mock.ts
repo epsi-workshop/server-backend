@@ -4,7 +4,7 @@ import type { Api } from "./client";
 import { ApiError, notifyUnauthorized } from "./client";
 import { hasRole } from "../util";
 import type {
-  Alert, AuditEntry, Badge, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogLevel, LogSource,
+  Alert, AuditEntry, Badge, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogLevel, LogSource,
   Point, RestartRequest, RestartTarget, Role, ServiceHealth, Settings, SystemState, ThreatLevel, User,
 } from "../types";
 import { captureDataUrl, type SceneOpts } from "./mockScene";
@@ -23,6 +23,8 @@ const users: (User & { password: string })[] = [
   { id: "u2", username: "operateur", role: "operateur", active: true, lastLogin: iso(Date.now() - 5 * HOUR), mustChangePassword: false, password: "demo" },
   { id: "u3", username: "lecteur", role: "lecteur", active: true, lastLogin: iso(Date.now() - 2 * DAY), mustChangePassword: false, password: "demo" },
 ];
+
+const team: TeamMember[] = [];
 
 const badges: Badge[] = [
   { id: "b1", uid: "04:A3:1F:6B", owner: "Équipe infra", active: true, lastUsed: iso(Date.now() - 3 * HOUR) },
@@ -628,6 +630,31 @@ export const mockApi: Api = {
     if (!b) throw new ApiError(404, "Badge introuvable.");
     badges.splice(badges.indexOf(b), 1);
     auditAdd(`Badge supprimé : ${b.uid}`);
+  },
+
+  async getTeam() { need("admin"); await wait(); return clone(team); },
+  async createMember(m) {
+    need("admin"); await wait();
+    if (!m.name.trim()) throw new ApiError(422, "Prénom requis.");
+    const nm: TeamMember = { id: uid("m"), name: m.name.trim(), photo: m.photo, active: true, createdAt: iso(), lastSeen: null };
+    team.push(nm);
+    auditAdd(`Membre de l'équipe ajouté : ${nm.name}`);
+    return clone(nm);
+  },
+  async updateMember(id, p) {
+    need("admin"); await wait();
+    const m = team.find((x) => x.id === id);
+    if (!m) throw new ApiError(404, "Membre introuvable.");
+    Object.assign(m, p);
+    auditAdd(`Membre modifié : ${m.name}`);
+    return clone(m);
+  },
+  async deleteMember(id) {
+    need("admin"); await wait();
+    const m = team.find((x) => x.id === id);
+    if (!m) throw new ApiError(404, "Membre introuvable.");
+    team.splice(team.indexOf(m), 1);
+    auditAdd(`Membre de l'équipe supprimé : ${m.name}`);
   },
 
   async getSettings() { need("admin"); await wait(); return clone(settings); },

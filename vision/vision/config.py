@@ -52,11 +52,21 @@ class Config(BaseSettings):
     track_home_angle: int = 90  # position de repos
     track_home_after_s: float = 20.0  # retour au repos sans mouvement (0 = jamais)
 
-    @field_validator("mqtt_ca", "mqtt_cert", "mqtt_key", "snapshot_dir")
+    # Reconnaissance faciale (faces.py). Vide = désactivée. Galerie écrite par le backend (même dossier).
+    face_models_dir: Path | None = None  # ex. ../models (scripts/download-face-models.sh)
+    faces_dir: Path = Path("/faces")
+    face_threshold: float = 0.363  # cosinus SFace minimal pour reconnaître un membre (valeur OpenCV Zoo)
+    face_min_px: int = 40  # visage plus petit (trop loin) ignoré
+    face_interval_s: float = 0.3  # au plus une analyse toutes les 0,3 s
+    face_cooldown_s: float = 30.0  # une même personne signalée au plus toutes les 30 s
+    display_api_url: str = ""  # écran OLED de l'UNO Q, ex. http://talos.local:8000 ; vide = pas d'écran
+    display_seconds: int = 5
+
+    @field_validator("mqtt_ca", "mqtt_cert", "mqtt_key", "snapshot_dir", "face_models_dir", "faces_dir")
     @classmethod
-    def relative_to_vision(cls, p: Path) -> Path:
+    def relative_to_vision(cls, p: Path | None) -> Path | None:
         """Chemin relatif = relatif au dossier vision/, pas au dossier de lancement."""
-        return p if p.is_absolute() else (VISION_DIR / p).resolve()
+        return p if p is None or p.is_absolute() else (VISION_DIR / p).resolve()
 
 
 config = Config()

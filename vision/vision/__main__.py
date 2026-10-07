@@ -8,6 +8,7 @@ from pathlib import Path
 import cv2
 
 from .config import VERSION, config
+from .faces import DisplayClient, FaceEvents, FaceRecognizer, draw_faces
 from .motion import MotionDetector, MotionResult, annotate
 from .publisher import Publisher
 from .source import camera_frames
@@ -18,9 +19,9 @@ log = logging.getLogger("vision")
 JPEG_QUALITY = [cv2.IMWRITE_JPEG_QUALITY, 80]
 
 
-def save_snapshot(directory: Path, jpeg: bytes, now: datetime) -> str:
+def save_snapshot(directory: Path, jpeg: bytes, now: datetime, prefix: str = "motion") -> str:
     """Écriture atomique (fichier temporaire puis renommage) : le backend ne lit jamais une image incomplète."""
-    name = f"motion-{now:%Y%m%d-%H%M%S}-{now.microsecond // 1000:03d}.jpg"
+    name = f"{prefix}-{now:%Y%m%d-%H%M%S}-{now.microsecond // 1000:03d}.jpg"
     tmp = directory / f".{name}.tmp"
     tmp.write_bytes(jpeg)
     os.replace(tmp, directory / name)
@@ -54,6 +55,18 @@ def main() -> None:
         log.info("Suivi actif : servo %s, repos à %d°", config.servo_api_url, tracker.angle)
     relearn_pending = False
 
+    faces = face_events = display = None
+    if config.face_models_dir:
+        faces = FaceRecognizer(config.face_models_dir, config.faces_dir / "gallery.json",
+                               config.face_threshold, config.face_min_px)
+        face_events = FaceEvents(cooldown_s=config.face_cooldown_s)
+        if config.display_api_url:
+            display = DisplayClient(config.display_api_url, config.display_seconds)
+        log.info("Reconnaissance faciale active (seuil %.3f)%s", config.face_threshold,
+                 f", écran {config.display_api_url}" if display else "")
+    last_face_check = 0.0
+    seen_faces: list = []
+
     try:
         for frame in camera_frames(config.camera_url, config.camera_user, config.camera_password):
             now = datetime.now()
@@ -75,14 +88,36 @@ def main() -> None:
                     target = tracker.update(mono, boxes, frame.shape[1])
                     if target is not None:
                         servo.move(target, config.track_speed)
+            new_faces = []
+            if faces and mono - last_face_check >= config.face_interval_s and not (tracker and tracker.frozen(mono)):
+                last_face_check = mono
+                faces.reload()
+                seen_faces = faces.analyze(frame)
+                new_faces = face_events.update(seen_faces, mono)
+            elif faces and mono - last_face_check > 1.0:
+                seen_faces = []  # pas d'analyse récente (rotation) : on n'affiche plus de cadre périmé
             label = None  # OpenCV n'affiche pas « ° »
             if tracker:
                 label = f"SUIVI {tracker.angle} deg" + (" ..." if tracker.frozen(mono) else "")
-            ok, buf = cv2.imencode(".jpg", annotate(frame, result, now, label, focus), JPEG_QUALITY)
+            out = annotate(frame, result, now, label, focus)
+            if seen_faces:
+                draw_faces(out, seen_faces)
+            ok, buf = cv2.imencode(".jpg", out, JPEG_QUALITY)
             if not ok:
                 continue
             jpeg = buf.tobytes()
             hub.publish(jpeg)
+
+            for face in new_faces:
+                snap = save_snapshot(config.snapshot_dir, jpeg, now, "face")
+                if face.member_id:
+                    log.info("Visage reconnu : %s (similarité %.2f)", face.name, face.similarity)
+                    publisher.detection("face_known", face.similarity, snap, face.member_id)
+                else:
+                    log.warning("Intrus : visage inconnu (meilleure similarité %.2f)", face.similarity)
+                    publisher.detection("face_unknown", face.score, snap)
+                if display:
+                    display.show(face)
 
             if result.masked != was_masked:
                 log.warning("Objectif masqué ou image uniforme" if result.masked else "Image de nouveau normale")

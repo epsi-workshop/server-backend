@@ -36,7 +36,8 @@ class Publisher:
         self.client.loop_start()
         self._last_seq = 0
 
-    def detection(self, kind: Literal["motion", "person"], confidence: float, snapshot: str | None) -> None:
+    def detection(self, kind: Literal["motion", "person", "face_known", "face_unknown"], confidence: float,
+                  snapshot: str | None, member_id: str | None = None) -> None:
         # seq en millisecondes : croissant même après un redémarrage du service (anti-rejeu du backend).
         seq = max(time.time_ns() // 1_000_000, self._last_seq + 1)
         self._last_seq = seq
@@ -44,6 +45,8 @@ class Publisher:
             "device": DEVICE, "seq": seq, "ts": iso(datetime.now(UTC)), "type": kind,
             "data": {"confidence": round(confidence, 2), "snapshot": snapshot},
         }
+        if member_id:
+            payload["data"]["member_id"] = member_id
         info = self.client.publish(TOPIC, json.dumps(payload), qos=1)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             log.warning("Détection non publiée (broker injoignable) : %s", mqtt.error_string(info.rc))

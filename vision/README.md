@@ -55,6 +55,26 @@ Réglages : la caméra part du mauvais côté → `TRACK_INVERT=true` ; elle osc
 ou augmenter `TRACK_DEADBAND` ; elle réagit trop tard → augmenter `TRACK_SPEED` (600 au plus).
 Servo injoignable : une ligne dans le journal, la détection continue en caméra fixe.
 
+## Reconnaissance faciale
+
+Les membres de l'équipe sont ajoutés dans le dashboard (Administration > Équipe : prénom et photo de face).
+Le backend calcule l'empreinte du visage et l'écrit dans `faces/gallery.json`, que ce service relit dès qu'il change.
+
+- **Modèles** : YuNet (détection, 0,2 Mo) et SFace (empreinte, 37 Mo), OpenCV Zoo, sur le CPU, sans LLM ni GPU.
+  Téléchargement : `scripts/download-face-models.sh` (dans `models/`, hors dépôt).
+- **Analyse** : au plus toutes les `FACE_INTERVAL_S` (0,3 s), environ 40 ms par image 640x480. Un visage
+  est reconnu si la similarité cosinus dépasse `FACE_THRESHOLD` (0,363) ; les visages de moins de `FACE_MIN_PX`
+  (40 px, au-delà de 3 m environ) sont ignorés.
+- **Anti-faux positifs** : un membre doit être vu sur 2 analyses consécutives, un inconnu sur 4, et aucun
+  intrus n'est signalé dans les 5 s qui suivent un membre reconnu (un membre de profil paraît souvent inconnu).
+  Une même personne est signalée au plus toutes les `FACE_COOLDOWN_S` (30 s).
+- **Effets** : capture `face-*.jpg`, message MQTT `face_known` (avec `member_id`) ou `face_unknown`, et écran
+  OLED de l'UNO Q (`DISPLAY_API_URL`, route `POST /display/face`) : « BONJOUR LÉA » ou « INTRU DÉTECTÉ ».
+- **Limite** : une photo de la personne présentée à la caméra est reconnue (pas de détection du vivant).
+
+Variables : `FACE_MODELS_DIR=../models` (vide = désactivée), `FACES_DIR=../faces` (même valeur côté backend),
+`DISPLAY_API_URL=http://talos.local:8000`.
+
 ## Message publié
 
 ```json

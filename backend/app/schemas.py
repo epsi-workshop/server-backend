@@ -108,10 +108,20 @@ class Detection(Camel):
     confidence: float
 
 
+class FaceSighting(Camel):
+    """Dernier visage vu par la caméra : membre reconnu (name) ou inconnu."""
+    ts: Ts
+    known: bool
+    name: str | None
+    confidence: float
+    snapshot_url: str | None
+
+
 class Camera(Camel):
     online: bool
     detection_active: bool
     last_detection: Detection | None
+    last_face: FaceSighting | None = None
     override_until: Ts | None
     masked: bool
 
@@ -276,6 +286,25 @@ class PasswordResetIn(Camel):
 class BadgeCreate(Camel):
     uid: Annotated[str, Field(max_length=32)]
     owner: Annotated[str, Field(max_length=64)]
+
+
+class TeamMember(Camel):
+    id: str
+    name: str
+    photo: str  # miniature en data URL (JPEG 160 px)
+    active: bool
+    created_at: Ts
+    last_seen: Ts | None
+
+
+class TeamMemberCreate(Camel):
+    name: Annotated[str, Field(min_length=1, max_length=32)]
+    photo: Annotated[str, Field(max_length=15_000_000)]  # JPEG ou PNG en base64 (data URL acceptée)
+
+
+class TeamMemberPatch(Camel):
+    name: Annotated[str, Field(min_length=1, max_length=32)] | None = None
+    active: bool | None = None
 
 
 class BadgePatch(Camel):

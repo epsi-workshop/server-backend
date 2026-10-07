@@ -1,4 +1,6 @@
-"""Administration : comptes, badges, paramètres de détection."""
+"""Administration : comptes, badges, équipe (reconnaissance faciale), paramètres de détection."""
+import base64
+import binascii
 import re
 import uuid
 
@@ -6,14 +8,16 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import delete, select
 
-from ..convert import to_badge, to_user
-from ..db import BadgeRow, SessionRow, SettingsRow, UserRow, apply_retention
+from ..convert import to_badge, to_member, to_user
+from ..db import BadgeRow, SessionRow, SettingsRow, TeamMemberRow, UserRow, apply_retention
 from ..deps import Admin, Db, client_ip
+from ..faces import EnrollError, enroll, write_gallery
 from ..hub import hub
 from ..journal import write_audit, write_log
 from ..live import live
 from ..schemas import (
-    Badge, BadgeCreate, BadgePatch, PasswordResetIn, Settings, User, UserCreate, UserPatch, dump,
+    Badge, BadgeCreate, BadgePatch, PasswordResetIn, Settings, TeamMember, TeamMemberCreate, TeamMemberPatch,
+    User, UserCreate, UserPatch, dump,
 )
 from ..security import check_password_policy, hash_password
 from ..util import clean
@@ -147,6 +151,80 @@ async def delete_badge(badge_id: uuid.UUID, request: Request, admin: Admin, db: 
     await db.delete(badge)
     await db.commit()
     await write_audit(admin.username, f"Badge supprimé : {badge.uid}", client_ip(request))
+
+
+# ---------------------------------------------------------------- équipe (reconnaissance faciale)
+async def sync_gallery(db: Db) -> None:
+    """Réécrit la galerie du service vision : empreintes des membres actifs uniquement."""
+    rows = (await db.execute(select(TeamMemberRow).where(TeamMemberRow.active))).scalars()
+    members = [{"id": str(m.id), "name": m.name, "embedding": m.embedding} for m in rows]
+    await run_in_threadpool(write_gallery, members)
+
+
+async def _get_member(db: Db, member_id: uuid.UUID) -> TeamMemberRow:
+    member = await db.get(TeamMemberRow, member_id)
+    if member is None:
+        raise HTTPException(404, "Membre introuvable.")
+    return member
+
+
+def _decode_photo(data: str) -> bytes:
+    if data.startswith("data:"):
+        data = data.partition(",")[2]
+    try:
+        return base64.b64decode(data, validate=True)
+    except (binascii.Error, ValueError):
+        raise HTTPException(422, "Photo invalide : image encodée en base64 attendue.") from None
+
+
+@router.get("/team")
+async def list_team(_: Admin, db: Db) -> list[TeamMember]:
+    return [to_member(m) for m in (await db.execute(select(TeamMemberRow).order_by(TeamMemberRow.name))).scalars()]
+
+
+@router.post("/team")
+async def create_member(body: TeamMemberCreate, request: Request, admin: Admin, db: Db) -> TeamMember:
+    name = clean(body.name, 32)
+    if not name:
+        raise HTTPException(422, "Prénom requis.")
+    try:
+        face = await run_in_threadpool(enroll, _decode_photo(body.photo))
+    except EnrollError as e:
+        raise HTTPException(422, str(e)) from None
+    member = TeamMemberRow(name=name, embedding=face.embedding, photo=face.thumbnail, active=True)
+    db.add(member)
+    await db.commit()
+    await sync_gallery(db)
+    await write_audit(admin.username, f"Membre de l'équipe ajouté : {member.name}", client_ip(request))
+    return to_member(member)
+
+
+@router.patch("/team/{member_id}")
+async def update_member(member_id: uuid.UUID, body: TeamMemberPatch, request: Request, admin: Admin,
+                        db: Db) -> TeamMember:
+    member = await _get_member(db, member_id)
+    changes = []
+    if body.name is not None and clean(body.name, 32) and clean(body.name, 32) != member.name:
+        member.name = clean(body.name, 32)
+        changes.append(f"prénom {member.name}")
+    if body.active is not None and body.active != member.active:
+        member.active = body.active
+        changes.append("activé" if body.active else "désactivé")
+    await db.commit()
+    if changes:
+        await sync_gallery(db)
+        await write_audit(admin.username, f"Membre modifié : {member.name} ({', '.join(changes)})",
+                          client_ip(request))
+    return to_member(member)
+
+
+@router.delete("/team/{member_id}", status_code=204)
+async def delete_member(member_id: uuid.UUID, request: Request, admin: Admin, db: Db) -> None:
+    member = await _get_member(db, member_id)
+    await db.delete(member)
+    await db.commit()
+    await sync_gallery(db)
+    await write_audit(admin.username, f"Membre de l'équipe supprimé : {member.name}", client_ip(request))
 
 
 # ---------------------------------------------------------------- paramètres

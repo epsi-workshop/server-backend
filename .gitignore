@@ -1,5 +1,8 @@
 # Captures de la caméra (service vision) : données de surveillance, jamais dans le dépôt.
 snapshots/
+# Galerie des visages de l'équipe (empreintes biométriques) et modèles téléchargés (scripts/download-face-models.sh).
+faces/
+models/
 
 # Toute image, où qu'elle soit (captures copiées ailleurs, tests). Pour versionner une image
 # voulue (logo…), l'ajouter explicitement ici avec une ligne !chemin/vers/image.png

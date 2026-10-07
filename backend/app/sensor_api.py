@@ -2,7 +2,7 @@
 
 Adresse de base : SENSOR_API_URL (http://talos.local:8000), à laquelle on ajoute les routes :
   GET /health  -> {"status": "ok", "uptime_s": 429}                         heartbeat (boîtier en ligne)
-  GET /sensors -> {"temperature_c", "humidity_pct", "pir": {"motion", …}}   télémesure, état du PIR
+  GET /sensors -> {"temperature_c", "humidity_pct", "pir": {"motion", …}, "lid": {"open", …}}   télémesure, PIR, porte
   WS  /ws/pir  -> {"event": "motion_start", "motion": true, …}             PIR en temps réel
 
 Chaque réponse est traduite en message du contrat (Envelope) et traitée par les mêmes fonctions que
@@ -20,9 +20,11 @@ import httpx
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
+from . import arming
 from .config import config
 from .ingest import Envelope, box_event, box_heartbeat, box_telemetry
 from .journal import write_log
+from .live import live
 from .util import utcnow
 
 POLL_S = 5
@@ -38,6 +40,7 @@ IPV4_ONLY = "0.0.0.0"
 # Routes de l'API, ajoutées à SENSOR_API_URL (documentation : SENSOR_API_URL/docs).
 ROUTE_HEALTH = "/health"
 ROUTE_SENSORS = "/sensors"
+ROUTE_ARMED = "/system/armed"  # + /on ou /off : armement poussé à l'UNO Q
 ROUTE_WS_PIR = "/ws/pir"
 ROUTE_OPENAPI = "/openapi.json"  # lue une fois, pour la version affichée dans l'administration
 
@@ -53,6 +56,8 @@ class SensorApi:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.motion: bool | None = None  # dernier état du PIR transmis
+        self.lid_open: bool | None = None  # dernier état de la porte du pot transmis
+        self.rfid_seq: int | None = None  # numéro du dernier passage de badge vu (None = pas encore de référence)
         self.http_ok: bool | None = None
         self.ws_ok: bool | None = None
         self.uptime_s = 0  # dernière valeur de /health, affichée dans l'administration
@@ -68,6 +73,37 @@ class SensorApi:
         self.motion = motion
         await box_event(self._envelope("pir", {"state": int(motion)}), SOURCE)
 
+    async def _set_lid(self, is_open: bool) -> None:
+        """Porte du pot (capteur infrarouge HW-201) : seuls les changements sont transmis."""
+        if is_open == self.lid_open:
+            return
+        self.lid_open = is_open
+        await box_event(self._envelope("lid_open", {"state": int(is_open)}), SOURCE)
+
+    async def _set_rfid(self, seq: int, uid: str) -> None:
+        """Nouveau passage de badge (seq a changé) : l'UID est transmis, le backend décide (table badges).
+        Le premier relevé sert de référence : un badge lu avant le démarrage du backend n'est pas rejoué."""
+        if self.rfid_seq is None or seq < self.rfid_seq:  # démarrage, ou compteur remis à zéro (UNO Q redémarrée)
+            self.rfid_seq = seq
+            return
+        if seq == self.rfid_seq:
+            return
+        self.rfid_seq = seq
+        hex_uid = "".join(c for c in uid.upper() if c in "0123456789ABCDEF")
+        if len(hex_uid) % 2 or not 8 <= len(hex_uid) <= 14:
+            await write_log("warn", "boitier", f"Badge illisible : {uid[:32]}")
+            return
+        await box_event(self._envelope("rfid_ok", {"uid": ":".join(hex_uid[i:i + 2] for i in range(0, len(hex_uid), 2))}), SOURCE)
+
+    async def push_armed(self, armed: bool) -> None:
+        """Armement (dashboard ou badge) poussé à l'UNO Q : écran et sortie « verrou »."""
+        try:
+            async with httpx.AsyncClient(base_url=self.base_url, timeout=TIMEOUT,
+                                         transport=httpx.AsyncHTTPTransport(local_address=IPV4_ONLY)) as client:
+                (await client.post(f"{ROUTE_ARMED}/{'on' if armed else 'off'}")).raise_for_status()
+        except httpx.HTTPError as e:
+            await write_log("warn", "boitier", f"Armement non transmis à l'UNO Q : {type(e).__name__}")
+
     async def _apply_sensors(self, s: dict[str, Any]) -> None:
         telemetry = {k: v for k, v in (("temperature", _number(s.get("temperature_c"))),
                                        ("humidity", _number(s.get("humidity_pct")))) if v is not None}
@@ -76,6 +112,15 @@ class SensorApi:
         pir = s.get("pir")
         if isinstance(pir, dict) and isinstance(pir.get("motion"), bool):
             await self._set_motion(pir["motion"])
+        rfid = s.get("rfid")
+        if isinstance(rfid, dict) and isinstance(rfid.get("seq"), int) and not isinstance(rfid.get("seq"), bool):
+            await self._set_rfid(rfid["seq"], rfid.get("uid") or "")
+        # Armement : l'UNO Q redémarre « désarmée » ; on lui renvoie l'état du dashboard s'il diffère.
+        if isinstance(s.get("armed"), bool) and s["armed"] != live.state.device.armed:
+            await self.push_armed(live.state.device.armed)
+        lid = s.get("lid")
+        if isinstance(lid, dict) and isinstance(lid.get("open"), bool):
+            await self._set_lid(lid["open"])
 
     async def _http_state(self, ok: bool, error: str = "") -> None:
         """Journalise seulement les changements (pas un message toutes les 5 s pendant une panne)."""
@@ -142,3 +187,5 @@ class SensorApi:
 
 # Instance unique : démarrée par main.py, lue par l'état des services (routers/control.py).
 sensor_api = SensorApi(config.sensor_api_url) if config.sensor_api_url else None
+if sensor_api:
+    arming.hooks.append(sensor_api.push_armed)

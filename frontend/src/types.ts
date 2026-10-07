@@ -47,6 +47,8 @@ export interface SystemState {
     /** true tant que le PIR détecte un mouvement, et cameraUnlockSeconds après le dernier mouvement. */
     detectionActive: boolean;
     lastDetection: { ts: string; confidence: number } | null;
+    /** Dernier visage vu : membre de l'équipe reconnu (name) ou intrus. */
+    lastFace?: FaceSighting | null;
     /** Accès forcé par un admin (journalisé), sinon null. */
     overrideUntil: string | null;
     masked: boolean;
@@ -93,6 +95,24 @@ export interface ServiceHealth {
   cpu: number; // %
   memMb: number;
   version: string;
+}
+
+export interface FaceSighting {
+  ts: string;
+  known: boolean;
+  name: string | null;
+  confidence: number;
+  snapshotUrl: string | null;
+}
+
+/** Membre de l'équipe reconnu par la caméra. photo : miniature en data URL. */
+export interface TeamMember {
+  id: string;
+  name: string;
+  photo: string;
+  active: boolean;
+  createdAt: string;
+  lastSeen: string | null;
 }
 
 export interface Badge {

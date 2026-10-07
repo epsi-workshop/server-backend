@@ -1,8 +1,10 @@
-import { useMemo, useRef, type ReactNode } from "react";
+import { Suspense, useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
-import { ContactShadows, Environment, Float, Lightformer, PerspectiveCamera } from "@react-three/drei";
+import { ContactShadows, Environment, Float, Lightformer, PerspectiveCamera, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
 import { MOTION, PALETTE, STATE_COLOR } from "./threat";
+import potClosedUrl from "../assets/pot-ferme.glb?url";
+import potOpenUrl from "../assets/pot-ouvert.glb?url";
 
 /**
  * Objets 3D de l'interface, en finition « studio » : céramique émaillée, métal brossé, feuillage mat.
@@ -330,39 +332,16 @@ export type PotState = {
   online: boolean; // boîtier joignable
   motion: boolean; // PIR en cours de détection
   cameraLive: boolean; // flux caméra ouvert (détection en cours)
+  doorOpen: boolean; // porte du pot ouverte (capteur infrarouge)
 };
 
-const POT_H = 0.9;
-const potRadius = (y: number) => 0.5 + (0.74 - 0.5) * (y / POT_H); // pot évasé vers le haut
+// Modèle réel du boîtier (Blender) : demi-coques, insert, terreau et plante, exporté en glTF,
+// en deux versions (porte fermée / porte ouverte) affichées selon le capteur de la porte.
+const POT_HEIGHT = 2; // hauteur totale dans la scène, en unités three.js
+const VIEW_ANGLE = -0.31; // même angle que le rendu de présentation (caméra à 18° sur la gauche)
 
-/** Le boîtier camouflé : pot en céramique émaillée, plante au feuillage mat, capteurs discrets en façade. */
+/** Le boîtier camouflé, d'après le modèle 3D du pot : porte ouverte ou fermée selon le capteur, lumières d'état discrètes. */
 export function PotSentinel({ state }: { state: PotState }) {
-  const spin = useSpin(0.22);
-  const plant = useRef<THREE.Group>(null);
-  const body = useMemo(() => new THREE.LatheGeometry([
-    new THREE.Vector2(0.001, 0), new THREE.Vector2(0.46, 0), new THREE.Vector2(0.5, 0.03),
-    new THREE.Vector2(potRadius(POT_H), POT_H), new THREE.Vector2(0.8, POT_H + 0.015),
-    new THREE.Vector2(0.81, POT_H + 0.08), new THREE.Vector2(0.73, POT_H + 0.09), new THREE.Vector2(0.71, POT_H),
-  ], 96), []);
-  const stems = useMemo(() => [
-    { end: [0.05, 1.9, 0.05], ctrl: [0.22, 1.4, 0], leaf: 0.5, rot: 0.3 },
-    { end: [-0.48, 1.62, 0.1], ctrl: [-0.12, 1.3, 0.1], leaf: 0.44, rot: 1.1 },
-    { end: [0.5, 1.58, -0.15], ctrl: [0.15, 1.25, -0.1], leaf: 0.44, rot: -1.1 },
-    { end: [-0.2, 1.52, -0.46], ctrl: [-0.05, 1.2, -0.2], leaf: 0.4, rot: 0.6 },
-    { end: [0.26, 1.46, 0.46], ctrl: [0.1, 1.2, 0.2], leaf: 0.36, rot: -0.5 },
-  ].map((s) => {
-    const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(0, POT_H, 0),
-      new THREE.Vector3(...(s.ctrl as [number, number, number])), new THREE.Vector3(...(s.end as [number, number, number])));
-    return { ...s, geom: new THREE.TubeGeometry(curve, 24, 0.016, 8, false), tip: curve.getPoint(1), dir: curve.getTangent(1) };
-  }), []);
-  useFrame(({ clock }) => {
-    if (!plant.current) return;
-    const t = clock.elapsedTime * MOTION;
-    plant.current.rotation.z = Math.sin(t * 0.6) * 0.025;
-    plant.current.rotation.x = Math.sin(t * 0.45) * 0.02;
-  });
-  const front = (y: number) => potRadius(y) + 0.01;
-  const tilt = -Math.atan((0.74 - 0.5) / POT_H); // inclinaison de la paroi
   return (
     <>
       <PerspectiveCamera makeDefault position={[0, 1.25, 4.4]} fov={33} onUpdate={(c) => c.lookAt(0, 0.82, 0)} />
@@ -370,55 +349,46 @@ export function PotSentinel({ state }: { state: PotState }) {
       <directionalLight position={[3, 5, 4]} intensity={1.7} />
       <directionalLight position={[-4, 2, -2]} intensity={0.5} color="#dfe8ff" />
       <StudioEnvironment resolution={256} />
-      <group position={[0, -0.15, 0]}>
-        <group ref={spin}>
-          {/* Pot : céramique ivoire émaillée, liseré laiton, terreau */}
-          <mesh geometry={body}><meshPhysicalMaterial color={PALETTE.ivory} roughness={0.3} clearcoat={1} clearcoatRoughness={0.05} side={THREE.DoubleSide} /></mesh>
-          <mesh position={[0, POT_H + 0.085, 0]} rotation={[Math.PI / 2, 0, 0]}><torusGeometry args={[0.77, 0.008, 8, 128]} /><Metal /></mesh>
-          <mesh position={[0, POT_H + 0.005, 0]} rotation={[-Math.PI / 2, 0, 0]}><circleGeometry args={[0.71, 64]} /><meshStandardMaterial color="#2b2119" roughness={1} /></mesh>
-
-          {/* Capteurs en façade : deux yeux à ultrasons, dôme du PIR, écran */}
-          <group position={[0, 0.66, front(0.66)]} rotation={[tilt, 0, 0]}>
-            {[-0.12, 0.12].map((x) => (
-              <group key={x} position={[x, 0, 0.02]} rotation={[Math.PI / 2, 0, 0]}>
-                <mesh><cylinderGeometry args={[0.065, 0.065, 0.05, 32]} /><Metal color="#cfcbc3" rough={0.3} /></mesh>
-                <mesh position={[0, 0.026, 0]}><cylinderGeometry args={[0.048, 0.048, 0.004, 32]} /><meshStandardMaterial color="#141416" roughness={0.9} /></mesh>
-              </group>
-            ))}
-          </group>
-          <group position={[0, 0.4, front(0.4)]} rotation={[tilt, 0, 0]}>
-            <mesh rotation={[Math.PI / 2, 0, 0]}>
-              <sphereGeometry args={[0.075, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
-              <meshPhysicalMaterial color="#111113" roughness={0.05} clearcoat={1} emissive={STATE_COLOR.warn} emissiveIntensity={state.motion ? 0.9 : 0} />
-            </mesh>
-          </group>
-          <group position={[0, 0.16, front(0.16)]} rotation={[tilt, 0, 0]}>
-            <mesh><planeGeometry args={[0.3, 0.12]} /><meshPhysicalMaterial color="#0d0d0f" roughness={0.04} clearcoat={1} /></mesh>
-            <mesh position={[0, 0, 0.002]}><planeGeometry args={[0.18, 0.016]} />
-              <meshBasicMaterial color={state.online ? (state.motion ? STATE_COLOR.warn : STATE_COLOR.ok) : STATE_COLOR.off} />
-            </mesh>
-          </group>
-
-          {/* Plante, la caméra discrètement logée dans le feuillage */}
-          <group ref={plant}>
-            {stems.map((s, i) => (
-              <group key={i}>
-                <mesh geometry={s.geom}><meshStandardMaterial color="#3f5a3a" roughness={0.7} /></mesh>
-                <Leaf position={s.tip} rotation={[0.35, s.rot, -Math.atan2(s.dir.x, s.dir.y)]} scale={s.leaf} />
-                <Leaf position={s.tip} rotation={[-0.3, s.rot + Math.PI * 0.8, -Math.atan2(s.dir.x, s.dir.y) + 0.9]} scale={s.leaf * 0.8} color={PALETTE.sage} />
-              </group>
-            ))}
-            <group position={[stems[0].tip.x, stems[0].tip.y - 0.3, stems[0].tip.z + 0.1]}>
-              <mesh rotation={[Math.PI / 2, 0, 0]}><cylinderGeometry args={[0.06, 0.068, 0.1, 32]} /><Ceramic color={PALETTE.graphite} rough={0.4} /></mesh>
-              <mesh position={[0, 0, 0.051]}><circleGeometry args={[0.04, 32]} />
-                <meshPhysicalMaterial color="#0a0a0c" roughness={0.02} clearcoat={1} emissive={STATE_COLOR.crit} emissiveIntensity={state.cameraLive ? 0.8 : 0} />
-              </mesh>
-              <mesh position={[0, 0, 0.052]}><ringGeometry args={[0.042, 0.05, 32]} /><Metal /></mesh>
-            </group>
-          </group>
-        </group>
-      </group>
+      {/* Détection : lueur ocre sur la façade ; flux en direct : touche rouge dans le feuillage */}
+      <pointLight position={[0, 0.6, 1.4]} intensity={state.motion ? 4 : 0} distance={3} color={STATE_COLOR.warn} />
+      <pointLight position={[0, 1.7, 0.9]} intensity={state.cameraLive ? 3 : 0} distance={2} color={STATE_COLOR.crit} />
+      <Suspense fallback={null}><PotModel url={state.doorOpen ? potOpenUrl : potClosedUrl} dim={!state.online} /></Suspense>
       <ContactShadows position={[0, -0.16, 0]} opacity={0.5} scale={3.2} blur={2.4} far={1.6} />
     </>
   );
 }
+
+function PotModel({ url, dim }: { url: string; dim: boolean }) {
+  const { scene } = useGLTF(url, false);
+  // Porte ouverte face à la caméra : léger balancement autour de cet angle, l'intérieur reste visible.
+  const sway = useRef<THREE.Group>(null);
+  useFrame(({ clock }) => {
+    if (sway.current) sway.current.rotation.y = VIEW_ANGLE + Math.sin(clock.elapsedTime * 0.35 * MOTION) * 0.22;
+  });
+  // Copie mise à l'échelle et posée au sol, axe du pot au centre.
+  const model = useMemo(() => {
+    const root = scene.clone(true);
+    const box = new THREE.Box3().setFromObject(root);
+    const size = box.getSize(new THREE.Vector3());
+    const k = POT_HEIGHT / size.y;
+    root.scale.setScalar(k);
+    const center = box.getCenter(new THREE.Vector3());
+    root.position.set(-center.x * k, -box.min.y * k - 0.15, -center.z * k);
+    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
+    return root;
+  }, [scene]);
+  // Boîtier hors ligne : légèrement désaturé et assombri.
+  useMemo(() => {
+    model.traverse((o) => {
+      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
+      if (!m || !("color" in m)) return;
+      m.userData.base ??= m.color.clone();
+      m.color.copy(m.userData.base as THREE.Color);
+      if (dim) m.color.lerp(new THREE.Color("#777777"), 0.55);
+    });
+  }, [model, dim]);
+  return <group ref={sway}><primitive object={model} /></group>;
+}
+
+useGLTF.preload(potClosedUrl, false);
+useGLTF.preload(potOpenUrl, false);

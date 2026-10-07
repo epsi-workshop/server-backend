@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { BellRing, Camera, KeyRound, Power, RefreshCw, Trash2, UserPlus } from "lucide-react";
+import { BellRing, Camera, ImagePlus, KeyRound, Power, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { api } from "../api";
 import { useAuth, useLive, useToast } from "../store";
 import { Confirm, Dot, Empty, Loading, Panel, Tabs } from "../components/ui";
-import type { Badge, RestartRequest, Role, ServiceHealth, Settings, User } from "../types";
+import type { Badge, RestartRequest, Role, ServiceHealth, Settings, TeamMember, User } from "../types";
 import { ROLE_LABEL, ago, errMsg, fmtDuration, fmtNum } from "../util";
 
-type Tab = "systeme" | "utilisateurs" | "badges" | "detection";
+type Tab = "systeme" | "utilisateurs" | "equipe" | "badges" | "detection";
 
 export default function Admin() {
   const [tab, setTab] = useState<Tab>("systeme");
@@ -16,11 +16,12 @@ export default function Admin() {
         <h1>Administration</h1>
         <Tabs value={tab} onChange={setTab} items={[
           { id: "systeme", label: "Système" }, { id: "utilisateurs", label: "Utilisateurs" },
-          { id: "badges", label: "Badges" }, { id: "detection", label: "Détection" },
+          { id: "equipe", label: "Équipe" }, { id: "badges", label: "Badges" }, { id: "detection", label: "Détection" },
         ]} />
       </div>
       {tab === "systeme" && <SystemTab />}
       {tab === "utilisateurs" && <UsersTab />}
+      {tab === "equipe" && <TeamTab />}
       {tab === "badges" && <BadgesTab />}
       {tab === "detection" && <DetectionTab />}
     </div>
@@ -222,6 +223,93 @@ function UsersTab() {
         body={<>Nouveau mot de passe : <code className="pwd">{toReset?.pwd}</code><br />Copiez-le avant de confirmer. La personne devra le changer à sa prochaine connexion.</>}
         confirmLabel="Réinitialiser" onClose={() => setToReset(null)}
         onConfirm={async () => { await api.resetPassword(toReset!.u.id, toReset!.pwd); toast("Mot de passe réinitialisé"); }} />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------- Équipe (reconnaissance faciale)
+/** Photo réduite à 1024 px (JPEG) avant envoi : une photo de téléphone fait plusieurs Mo. */
+function shrinkPhoto(file: File, max = 1024): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * k);
+      canvas.height = Math.round(img.height * k);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/jpeg", 0.9));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Image illisible.")); };
+    img.src = url;
+  });
+}
+
+function TeamTab() {
+  const toast = useToast();
+  const [team, setTeam] = useState<TeamMember[] | null>(null);
+  const [name, setName] = useState("");
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [toDelete, setToDelete] = useState<TeamMember | null>(null);
+  const load = useCallback(() => api.getTeam().then(setTeam).catch((e) => toast(errMsg(e), "err")), [toast]);
+  useEffect(() => { load(); }, [load]);
+  const act = async (fn: () => Promise<unknown>, ok: string) => {
+    try { await fn(); toast(ok); load(); return true; } catch (e) { toast(errMsg(e), "err"); return false; }
+  };
+  return (
+    <>
+      <Panel title="Membres reconnus par la caméra">
+        {!team ? <Loading /> : team.length === 0 ? <Empty>Aucun membre : tout visage sera signalé comme intrus.</Empty> : (
+          <ul className="team-grid">
+            {team.map((m) => (
+              <li key={m.id} className={`team-card${m.active ? "" : " is-off"}`}>
+                <img src={m.photo} alt={`Visage de ${m.name}`} />
+                <div className="team-meta">
+                  <strong>{m.name}</strong>
+                  <span className="muted small">Vu {m.lastSeen ? ago(m.lastSeen) : "jamais"}</span>
+                  <label className="switch">
+                    <input type="checkbox" checked={m.active}
+                      onChange={(e) => act(() => api.updateMember(m.id, { active: e.target.checked }), e.target.checked ? "Membre activé" : "Membre désactivé")} />
+                    <span>{m.active ? "Reconnu" : "Ignoré"}</span>
+                  </label>
+                </div>
+                <button className="icon-btn danger" aria-label={`Supprimer ${m.name}`} title="Supprimer" onClick={() => setToDelete(m)}><Trash2 size={16} /></button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="muted small">Un visage reconnu affiche « BONJOUR » sur l'écran du boîtier et atténue le score de menace, comme un badge valide. Un visage inconnu affiche « INTRU DÉTECTÉ » et déclenche une alerte avec capture.</p>
+      </Panel>
+      <Panel title="Ajouter un membre">
+        <form className="team-form" onSubmit={async (e) => {
+          e.preventDefault();
+          if (!photo) { toast("Choisissez une photo.", "err"); return; }
+          setBusy(true);
+          if (await act(() => api.createMember({ name, photo }), `${name.trim()} ajouté à l'équipe`)) { setName(""); setPhoto(null); }
+          setBusy(false);
+        }}>
+          <label className="team-drop">
+            {photo ? <img src={photo} alt="Aperçu de la photo" /> : <><ImagePlus size={28} /><span>Photo de face</span></>}
+            <input type="file" accept="image/*" capture="user" onChange={async (e) => {
+              const file = e.target.files?.[0];
+              e.target.value = "";
+              if (file) shrinkPhoto(file).then(setPhoto).catch((err) => toast(errMsg(err), "err"));
+            }} />
+          </label>
+          <div className="team-fields">
+            <label className="field"><span>Prénom</span>
+              <input required maxLength={32} value={name} onChange={(e) => setName(e.target.value)} /></label>
+            <p className="muted small">Une seule personne sur la photo, de face, bien éclairée, sans lunettes de soleil ni casquette. Seuls une miniature et l'empreinte du visage sont conservées.</p>
+            <button className="btn btn-primary" type="submit" disabled={busy}>{busy ? "Analyse du visage…" : "Ajouter à l'équipe"}</button>
+          </div>
+        </form>
+      </Panel>
+      <Confirm open={!!toDelete} title={`Supprimer ${toDelete?.name} ?`} body="Son visage ne sera plus reconnu : la caméra le signalera comme intrus."
+        confirmLabel="Supprimer" danger onClose={() => setToDelete(null)}
+        onConfirm={async () => { await api.deleteMember(toDelete!.id); toast("Membre supprimé"); load(); }} />
     </>
   );
 }

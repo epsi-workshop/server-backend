@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
-    BigInteger, Column, DateTime, Float, ForeignKey, Index, Integer, String, Table, Text, text,
+    BigInteger, Column, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String, Table, Text, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -73,6 +73,18 @@ class BadgeRow(Base):
     owner: Mapped[str] = mapped_column(String(64))
     active: Mapped[bool] = mapped_column(default=True)
     last_used: Mapped[datetime | None] = mapped_column(TS)
+
+
+class TeamMemberRow(Base):
+    """Membre de l'équipe reconnu par la caméra : prénom, empreinte du visage (SFace) et miniature."""
+    __tablename__ = "team_members"
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    name: Mapped[str] = mapped_column(String(32))
+    embedding: Mapped[list[float]] = mapped_column(JSONB)
+    photo: Mapped[bytes] = mapped_column(LargeBinary)
+    active: Mapped[bool] = mapped_column(default=True)
+    created_at: Mapped[datetime] = mapped_column(TS, default=utcnow)
+    last_seen: Mapped[datetime | None] = mapped_column(TS)
 
 
 class AlertRow(Base):

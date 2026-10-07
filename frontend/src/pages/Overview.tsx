@@ -4,6 +4,7 @@ import { useLive } from "../store";
 import { Dot, Empty, Loading, Panel, Sparkline } from "../components/ui";
 import { LEVEL_LABEL, ago, cameraOpen, fmtDuration, fmtNum, overrideLeftS } from "../util";
 import { PotSlot } from "../three/Views";
+import { FaceBanner } from "../components/FaceBanner";
 
 const DIST_MAX = 250;
 const DIST_THRESHOLD = 50;
@@ -21,14 +22,16 @@ export default function Overview() {
 
   return (
     <div className="grid">
+      <FaceBanner face={c.lastFace} />
       <Panel title="Pot sentinelle" className="span-4 row-2" tone={!d.online ? "crit" : s.pir.active ? "warn" : undefined}>
-        <PotSlot className="pot-view" state={{ online: d.online, motion: s.pir.active, cameraLive: camOpen }} />
+        <PotSlot className="pot-view" state={{ online: d.online, motion: s.pir.active, cameraLive: camOpen, doorOpen: s.lid.open }} />
         <p className="pot-caption">Le boîtier, camouflé en plante d'intérieur.</p>
         <dl className="facts pot-legend">
           <div><dt>Feuillage<small>caméra + servo</small></dt><dd><Dot tone={!c.online ? "crit" : camOpen ? "warn" : "ok"} />{!c.online ? "Hors ligne" : camOpen ? "En direct" : "En veille"}</dd></div>
+          <div><dt>Porte<small>capteur infrarouge</small></dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouverte" : "Fermée"}</dd></div>
           <div><dt>Pétale infrarouge<small>PIR</small></dt><dd><Dot tone={s.pir.active ? "warn" : "ok"} />{s.pir.active ? "Mouvement" : "Calme"}</dd></div>
           <div><dt>Sève<small>DHT22</small></dt><dd>{fmtNum(s.temperature.value)} °C · {fmtNum(s.humidity.value, 0)} %</dd></div>
-          <div><dt>Veille<small>système</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armée" : "Désarmée"}</dd></div>
+          <div><dt>Verrou<small>badge RFID</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armé, porte verrouillée" : "Désarmé, porte libre"}</dd></div>
           <div><dt>Racines<small>UNO Q</small></dt><dd><Dot tone={d.online ? "ok" : "crit"} />{d.online ? `En ligne · ${fmtDuration(d.uptimeS)}` : "Muet"}</dd></div>
         </dl>
       </Panel>
@@ -97,11 +100,27 @@ export default function Overview() {
 
       <Panel title="Intégrité du boîtier" className="span-4" icon="integrity" tone={s.lid.open || s.imu.shock ? "crit" : undefined}>
         <dl className="facts facts-tight">
-          <div><dt>Capot</dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouvert" : "Fermé"}</dd></div>
+          <div><dt>Porte</dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouverte" : "Fermée"}</dd></div>
           <div><dt>Accélération</dt><dd className={s.imu.shock ? "txt-crit" : ""}>{fmtNum(s.imu.accelG, 2)} g</dd></div>
           <div><dt>Inclinaison</dt><dd>{fmtNum(s.imu.tiltDeg)}°</dd></div>
           <div><dt>Dernier choc</dt><dd>{ago(s.imu.lastShock)}</dd></div>
         </dl>
+      </Panel>
+
+      <Panel title="Visages" className="span-4" icon="rfid" tone={c.lastFace && !c.lastFace.known ? "crit" : undefined}>
+        {c.lastFace ? (
+          <>
+            <div className="big-state">
+              <Dot tone={c.lastFace.known ? "ok" : "crit"} />
+              <strong>{c.lastFace.known ? `Bonjour ${c.lastFace.name}` : "Intrus détecté"}</strong>
+            </div>
+            <dl className="facts">
+              <div><dt>Identité</dt><dd>{c.lastFace.known ? c.lastFace.name : "inconnue"}</dd></div>
+              <div><dt>{c.lastFace.known ? "Ressemblance" : "Détection"}</dt><dd>{Math.round(c.lastFace.confidence * 100)} %</dd></div>
+              <div><dt>Vu</dt><dd>{ago(c.lastFace.ts)}</dd></div>
+            </dl>
+          </>
+        ) : <Empty>Aucun visage vu depuis le démarrage.</Empty>}
       </Panel>
 
       <Panel title="Badge (RFID)" className="span-4" icon="rfid" tone={s.rfid.accepted === false ? "warn" : undefined}>

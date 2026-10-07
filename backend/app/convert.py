@@ -1,6 +1,8 @@
 """Lignes SQL -> modèles du contrat."""
-from .db import AlertRow, AuditRow, BadgeRow, LogRow, UserRow
-from .schemas import Alert, AuditEntry, Badge, LogEntry, User
+import base64
+
+from .db import AlertRow, AuditRow, BadgeRow, LogRow, TeamMemberRow, UserRow
+from .schemas import Alert, AuditEntry, Badge, LogEntry, TeamMember, User
 
 
 def to_user(u: UserRow) -> User:
@@ -34,4 +36,11 @@ def to_audit(r: AuditRow) -> AuditEntry:
 def to_badge(b: BadgeRow) -> Badge:
     return Badge.model_validate({
         "id": str(b.id), "uid": b.uid, "owner": b.owner, "active": b.active, "last_used": b.last_used,
+    })
+
+
+def to_member(m: TeamMemberRow) -> TeamMember:
+    return TeamMember.model_validate({
+        "id": str(m.id), "name": m.name, "photo": "data:image/jpeg;base64," + base64.b64encode(m.photo).decode(),
+        "active": m.active, "created_at": m.created_at, "last_seen": m.last_seen,
     })

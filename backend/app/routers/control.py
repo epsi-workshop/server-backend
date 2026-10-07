@@ -16,6 +16,7 @@ from ..db import UserRow
 from ..deps import Admin, Db, Lecteur, Operateur, client_ip
 from ..journal import write_audit, write_log
 from ..live import live
+from ..arming import apply_armed
 from ..mqtt import Command, CommandError, send_command
 from ..schemas import BuzzerIn, OverrideIn, RestartIn, ServiceHealth
 from ..sensor_api import sensor_api
@@ -48,8 +49,7 @@ async def _command(cmd: Command, action: str, user: UserRow, request: Request) -
 async def arm(device_id: str, request: Request, user: Operateur) -> None:
     _check_device(device_id)
     await _command("arm", "Système armé", user, request)
-    live.state.device.armed = True
-    live.publish()
+    await apply_armed(True)
     await write_audit(user.username, "Système armé", client_ip(request))
     await write_log("info", "admin", f"Système armé par {user.username}")
 
@@ -58,8 +58,7 @@ async def arm(device_id: str, request: Request, user: Operateur) -> None:
 async def disarm(device_id: str, request: Request, user: Operateur) -> None:
     _check_device(device_id)
     await _command("disarm", "Système désarmé", user, request)
-    live.state.device.armed = False
-    live.publish()
+    await apply_armed(False)
     await write_audit(user.username, "Système désarmé", client_ip(request))
     await write_log("info", "admin", f"Système désarmé par {user.username}")
 

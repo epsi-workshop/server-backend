@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from .camera import camera
 from .config import VERSION, config
 from .correlation import correlator
-from .db import apply_retention, engine, init_db
+from .db import SessionLocal, apply_retention, engine, init_db
 from .ingest import HANDLERS, watchdog
 from .journal import write_log
 from .live import live
@@ -23,6 +23,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await init_db()
     await live.load()
     await apply_retention(live.settings.retention_days)
+    async with SessionLocal() as db:
+        await admin.sync_gallery(db)  # galerie du service vision à jour même si le fichier a été perdu
     tasks = [asyncio.create_task(t) for t in (live.run(), camera.probe(), correlator.run(), watchdog())]
     if sensor_api:
         tasks.append(asyncio.create_task(sensor_api.run()))

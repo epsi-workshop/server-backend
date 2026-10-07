@@ -139,6 +139,11 @@ export const liveApi: Api = {
   updateBadge: (id, p) => patch(`/api/badges/${seg(id)}`, p),
   deleteBadge: (id) => del(`/api/badges/${seg(id)}`),
 
+  getTeam: () => get("/api/team"),
+  createMember: (m) => post("/api/team", m),
+  updateMember: (id, p) => patch(`/api/team/${seg(id)}`, p),
+  deleteMember: (id) => del(`/api/team/${seg(id)}`),
+
   getSettings: () => get("/api/settings"),
   saveSettings: (s) => req("PUT", "/api/settings", s),
 };

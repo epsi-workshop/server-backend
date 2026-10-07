@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { Lock, Unlock } from "lucide-react";
 import { api } from "../api";
+import { FaceBanner } from "../components/FaceBanner";
 import { useAuth, useLive, useToast } from "../store";
 import { Confirm, Empty, Loading, Panel } from "../components/ui";
 import { LEVEL_LABEL, ago, fmtDateTime, overrideLeftS } from "../util";
@@ -27,6 +28,7 @@ export default function Camera() {
 
   return (
     <div className="stack">
+      <FaceBanner face={c.lastFace} />
       <Panel title="Flux en direct" icon="camera" tone={open ? "crit" : undefined}
         action={open ? <span className="live-pill">{overrideLeft > 0 ? `accès forcé, ${overrideLeft} s restantes` : "détection en cours"}</span> : undefined}>
         {!c.online ? (

@@ -18,6 +18,8 @@ dependencies = [
   "psutil~=6.1",
   "httpx~=0.28",
   "websockets>=13",  # client WebSocket de l'API capteurs (websockets.asyncio)
+  "opencv-python-headless~=4.10",  # reconnaissance faciale : enrôlement des membres (faces.py)
+  "numpy~=2.1",
   "tzdata",  # fuseaux horaires pour zoneinfo (absents sous Windows et dans l'image slim)
 ]
 

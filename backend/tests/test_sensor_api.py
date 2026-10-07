@@ -53,3 +53,45 @@ def test_motion_sent_only_on_change(sent: list[tuple[str, dict[str, Any]]]) -> N
 def test_malformed_response_ignored(sent: list[tuple[str, dict[str, Any]]]) -> None:
     run(sensor_api.SensorApi("http://x")._apply_sensors({"temperature_c": "chaud", "pir": "oui", "humidity_pct": True}))
     assert sent == []
+
+
+def test_door_state_translated_on_change(sent: list[tuple[str, dict[str, Any]]]) -> None:
+    """Valeurs d'exemple : porte fermée, ouverte deux fois de suite (une seule transmission), refermée."""
+    api = sensor_api.SensorApi("http://x")
+
+    async def scenario() -> None:
+        for is_open in (False, True, True, False):
+            await api._apply_sensors({"lid": {"open": is_open, "source": "simulation"}})
+
+    run(scenario())
+    assert sent == [("lid_open", {"state": 0}), ("lid_open", {"state": 1}), ("lid_open", {"state": 0})]
+
+
+def test_door_absent_or_malformed_ignored(sent: list[tuple[str, dict[str, Any]]]) -> None:
+    run(sensor_api.SensorApi("http://x")._apply_sensors({"lid": {"open": "oui"}}))
+    run(sensor_api.SensorApi("http://x")._apply_sensors({"lid": None}))
+    assert sent == []
+
+
+def test_badge_passes_translated(sent: list[tuple[str, dict[str, Any]]]) -> None:
+    """Valeurs d'exemple : référence au démarrage (pas rejouée), deux passages, relecture identique ignorée."""
+    api = sensor_api.SensorApi("http://x")
+
+    async def scenario() -> None:
+        for seq, uid in ((3, "DEADBEEF"), (4, "04a1b2c3"), (4, "04a1b2c3"), (5, "04A1B2C3")):
+            await api._apply_sensors({"rfid": {"seq": seq, "uid": uid, "source": "simulation"}})
+
+    run(scenario())
+    assert sent == [("rfid_ok", {"uid": "04:A1:B2:C3"}), ("rfid_ok", {"uid": "04:A1:B2:C3"})]
+
+
+def test_badge_counter_reset_is_new_reference(sent: list[tuple[str, dict[str, Any]]]) -> None:
+    """UNO Q redémarrée : le compteur repart de 0, ce n'est pas un passage."""
+    api = sensor_api.SensorApi("http://x")
+
+    async def scenario() -> None:
+        for seq in (7, 0, 1):
+            await api._apply_sensors({"rfid": {"seq": seq, "uid": "04A1B2C3"}})
+
+    run(scenario())
+    assert sent == [("rfid_ok", {"uid": "04:A1:B2:C3"})]
