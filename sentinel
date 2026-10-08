@@ -57,10 +57,20 @@ etat() {
     err "Dashboard injoignable en HTTPS"
   fi
   if dc logs mosquitto --no-log-prefix 2>/dev/null | grep "as backend" >/dev/null; then ok "Backend connecté au broker MQTT (TLS)"; else warn "Backend pas encore connecté au broker"; fi
-  local hb
-  hb=$(dc exec -T db psql -U "${POSTGRES_USER:-sentinel}" -d sentinel -tAc \
-       "select coalesce(to_char(max(time) at time zone 'Europe/Paris', 'DD/MM HH24:MI:SS'), 'jamais') from events where device='box01' and type='heartbeat'" 2>/dev/null || echo "?")
-  echo "  Dernier signe de vie du boîtier : ${B}${hb}${N}"
+  local box last
+  box=$(dc exec -T db psql -U "${POSTGRES_USER:-sentinel}" -d sentinel -tAc \
+       "select case when message like '%en ligne' then 'en ligne depuis ' else 'HORS LIGNE depuis ' end
+               || to_char(ts at time zone 'Europe/Paris', 'DD/MM HH24:MI:SS')
+        from logs where source = 'boitier' and message ~ '^Boîtier \\S+ (en ligne|muet|déconnecté)'
+        order by ts desc limit 1" 2>/dev/null || true)
+  last=$(dc exec -T db psql -U "${POSTGRES_USER:-sentinel}" -d sentinel -tAc \
+       "select coalesce(to_char(max(time) at time zone 'Europe/Paris', 'DD/MM HH24:MI:SS'), 'aucun') from events where device = 'box01'" 2>/dev/null || echo "?")
+  case "$box" in
+    "en ligne"*) ok "Boîtier ${box}" ;;
+    "") warn "Boîtier jamais connecté depuis le démarrage de la base" ;;
+    *) err "Boîtier ${box}" ;;
+  esac
+  echo "  Dernier événement du boîtier (PIR, porte, badge…) : ${B}${last}${N}"
   local cam_err
   cam_err=$(dc logs vision --no-log-prefix --since 2m 2>/dev/null | grep -c "Caméra injoignable" || true)
   if [ "$cam_err" -gt 0 ]; then warn "Caméra (ESP32-CAM) injoignable : vérifier qu'elle est allumée et sur le Wi-Fi"

@@ -33,7 +33,7 @@ Toutes les commandes ci-dessous se tapent depuis ce dossier. Pour revoir la list
 
 - Chaque service doit être « Up » ; `backend` et `db` affichent aussi « (healthy) ».
 - ✔ vert : tout va bien. ! jaune : à surveiller. ✘ rouge : problème (voir la section 7).
-- « Dernier signe de vie du boîtier : jamais » est normal tant que le boîtier n'est pas branché.
+- « Boîtier jamais connecté » est normal tant que la carte n'est pas branchée (`./sentinel carte`).
 - « Caméra injoignable » est normal tant que l'ESP32-CAM n'est pas allumée sur le Wi-Fi du projet.
 
 ## 3. Ouvrir le dashboard
@@ -110,7 +110,7 @@ La commande trouve la carte sur le partage de connexion (en général `172.20.10
 
 - **Boîtier** : il se connecte au broker en MQTTS (port 8883) avec **son certificat**. Copiez les 3 fichiers de `pki/box01/` (`ca.crt`, `box01.crt`, `box01.key`) sur le PC de la passerelle (`firmware/gateway/certs/`) ou sur l'UNO Q, avec `MQTT_HOST=192.168.50.10`, `MQTT_PORT=8883`, `MQTT_TLS=true`. Le fichier `box01.key` est secret : ne le mettez jamais dans Git.
 - **Caméra** : l'ESP32-CAM doit être à l'adresse `192.168.50.21`, flux sur `http://192.168.50.21:81/stream`. Autre adresse ou mot de passe : modifiez `CAMERA_URL`, `CAMERA_USER` et `CAMERA_PASSWORD` dans le fichier `.env`, puis `./sentinel redemarrer`.
-- Ça marche quand `./sentinel etat` affiche une heure dans « Dernier signe de vie du boîtier », et qu'un passage devant le PIR apparaît sur le dashboard (jalon 3 du cahier).
+- Ça marche quand `./sentinel etat` affiche « Boîtier en ligne », et qu'un passage devant le PIR apparaît sur le dashboard (jalon 3 du cahier).
 - **Détection d'anomalies** : elle apprend le fonctionnement normal de la salle. Il lui faut au moins 2 h de mesures, idéalement plusieurs jours : laissez le boîtier mesurer le plus tôt possible.
 
 ## 7. Problèmes fréquents
