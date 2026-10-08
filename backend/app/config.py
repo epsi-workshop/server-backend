@@ -51,6 +51,10 @@ class Config(BaseSettings):
     ntfy_token: str = ""
     dashboard_url: str = "https://sentinel.lan"
 
+    # Superviseur (supervisor.py) : redémarrages à liste blanche et état des conteneurs. Vide = indisponible.
+    supervisor_url: str = ""
+    supervisor_token: str = ""
+
     # Reconnaissance faciale (faces.py) : modèles OpenCV Zoo et galerie lue par le service vision (volume partagé).
     face_models_dir: Path = Path("/models")
     faces_dir: Path = Path("/faces")

@@ -15,6 +15,7 @@ from .journal import write_log
 from .live import live
 from .mqtt import bus
 from .sensor_api import sensor_api
+from . import snapshots
 from .routers import admin, auth, control, monitoring, ws
 
 
@@ -25,7 +26,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     await apply_retention(live.settings.retention_days)
     async with SessionLocal() as db:
         await admin.sync_gallery(db)  # galerie du service vision à jour même si le fichier a été perdu
-    tasks = [asyncio.create_task(t) for t in (live.run(), camera.probe(), correlator.run(), watchdog())]
+    tasks = [asyncio.create_task(t) for t in (live.run(), camera.probe(), correlator.run(), watchdog(), snapshots.run())]
     if sensor_api:
         tasks.append(asyncio.create_task(sensor_api.run()))
     await write_log("info", "backend", f"Démarrage du backend {VERSION}")

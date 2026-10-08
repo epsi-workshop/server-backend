@@ -9,6 +9,8 @@
 # Chaque service ne reçoit que ses propres variables (pas d'env_file commun : le mot de passe de la base
 # ne va qu'à db et backend).
 
+name: sentinel-x  # nom du projet (préfixe des conteneurs et volumes, utilisé par le superviseur)
+
 x-logging: &logging
   driver: json-file
   options: { max-size: "10m", max-file: "3" }
@@ -72,10 +74,11 @@ services:
       retries: 20
 
   # Une fois au démarrage : propriétaires des volumes partagés. Les captures appartiennent à vision (uid 10002),
-  # qui les écrit, et la galerie des visages au backend (uid 10001), qui l'écrit ; l'autre service lit seulement.
+  # qui les écrit, et au groupe 10010 (setgid) dont le backend fait partie pour appliquer la rétention (suppression) ;
+  # la galerie des visages appartient au backend (uid 10001), qui l'écrit, vision la lit.
   volumes-init:
     image: alpine:3.24.2
-    command: ["sh", "-c", "chown 10002:10002 /snapshots && chown 10001:10001 /faces && chmod 755 /snapshots /faces"]
+    command: ["sh", "-c", "chown 10002:10010 /snapshots && chmod 2775 /snapshots && chown 10001:10001 /faces && chmod 755 /faces"]
     volumes: [snapshots:/snapshots, faces:/faces]
     network_mode: none
     restart: "no"
@@ -104,12 +107,15 @@ services:
       NTFY_TOPIC: ${NTFY_TOPIC:-sentinel-alertes}
       NTFY_TOKEN: ${NTFY_TOKEN:-}
       DASHBOARD_URL: ${DASHBOARD_URL:-https://sentinel.lan}
+      SUPERVISOR_URL: http://supervisor:8090
+      SUPERVISOR_TOKEN: ${SUPERVISOR_TOKEN:-}
+    group_add: ["10010"]  # groupe des captures : rétention (snapshots.py)
     volumes:
       - ./pki/backend:/certs:ro
       - ./models:/models:ro
-      - snapshots:/snapshots:ro
+      - snapshots:/snapshots
       - faces:/faces
-    networks: [edge, data, mqtt]
+    networks: [edge, data, mqtt, supervision]
     depends_on:
       db: { condition: service_healthy }
       mosquitto: { condition: service_started }
@@ -168,6 +174,20 @@ services:
     networks: [mqtt]
     depends_on: [mosquitto]
 
+  # Seul service avec le socket Docker (équivalent root sur l'hôte) : liste blanche de redémarrages, jeton,
+  # réseau interne joignable par le backend seul, utilisateur non-root du groupe docker de l'hôte.
+  supervisor:
+    <<: *app
+    build: ./supervisor
+    image: sentinel-x/supervisor:0.1.0
+    group_add: ["${DOCKER_GID:-984}"]
+    environment:
+      COMPOSE_PROJECT: sentinel-x
+      SUPERVISOR_TOKEN: ${SUPERVISOR_TOKEN:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [supervision]
+
   frontend:
     <<: *hardened
     build: ./frontend
@@ -176,7 +196,7 @@ services:
 
   ntfy:
     <<: *hardened
-    image: binwiederhier/ntfy:v2.28.0
+    image: binwiederhier/ntfy:v2.29.0
     command: serve
     environment:
       NTFY_BASE_URL: https://ntfy.sentinel.lan
@@ -201,6 +221,8 @@ networks:
   mqtt: {}
   # Base de données : backend seulement, sans accès extérieur.
   data: { internal: true }
+  # Superviseur : backend seulement, sans accès extérieur.
+  supervision: { internal: true }
 
 volumes:
   caddy_data: {}

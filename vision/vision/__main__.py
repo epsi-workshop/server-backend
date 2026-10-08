@@ -18,6 +18,8 @@ from .tracking import ServoClient, Tracker, largest
 
 log = logging.getLogger("vision")
 JPEG_QUALITY = [cv2.IMWRITE_JPEG_QUALITY, 80]
+MASK_CONFIRM_S = 2.0  # image uniforme pendant 2 s avant de signaler l'objectif masqué (pas sur un flash)
+MASK_REPUBLISH_S = 10.0  # état republié tant que ça dure : le backend le retrouve après un redémarrage
 
 
 def save_snapshot(directory: Path, jpeg: bytes, now: datetime, prefix: str = "motion") -> str:
@@ -40,7 +42,8 @@ def main() -> None:
     detector = MotionDetector(config.motion_min_area, config.motion_confirm, config.motion_window,
                               config.warmup_frames)
     last_snapshot = last_publish = 0.0
-    was_moving = was_masked = False
+    was_moving = was_masked = masked_raw = False
+    masked_since = last_masked_publish = 0.0
 
     tracker = servo = None
     if config.servo_api_url:
@@ -169,9 +172,19 @@ def main() -> None:
                     publisher.detection("person", person_conf, snap)
                     last_person_publish = t
 
-            if result.masked != was_masked:
-                log.warning("Objectif masqué ou image uniforme" if result.masked else "Image de nouveau normale")
-                was_masked = result.masked
+            # Objectif masqué : confirmé après MASK_CONFIRM_S d'image uniforme (pendant une rotation du servo,
+            # l'image n'est pas analysée : l'état précédent est conservé).
+            frame_masked = masked_raw if tracker and tracker.frozen(mono) else result.masked
+            if frame_masked != masked_raw:
+                masked_raw, masked_since = frame_masked, mono
+            if masked_raw != was_masked and mono - masked_since >= MASK_CONFIRM_S:
+                was_masked = masked_raw
+                log.warning("Objectif masqué ou image uniforme" if was_masked else "Image de nouveau normale")
+                publisher.masked(was_masked)
+                last_masked_publish = mono
+            elif was_masked and mono - last_masked_publish >= MASK_REPUBLISH_S:
+                publisher.masked(True)
+                last_masked_publish = mono
             if result.moving != was_moving:
                 log.info("Mouvement détecté" if result.moving else "Fin du mouvement")
                 was_moving = result.moving

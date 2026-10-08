@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import text
 
+from .. import supervisor
 from ..camera import camera
 from ..config import VERSION, config
 from ..db import UserRow
@@ -18,7 +19,7 @@ from ..journal import write_audit, write_log
 from ..live import live
 from ..arming import apply_armed
 from ..mqtt import Command, CommandError, send_command
-from ..schemas import BuzzerIn, OverrideIn, RestartIn, ServiceHealth
+from ..schemas import BuzzerIn, OverrideIn, RestartIn, RestartTarget, ServiceHealth
 from ..sensor_api import sensor_api
 from ..util import clean, utcnow
 
@@ -101,17 +102,41 @@ async def stream(_: Lecteur) -> StreamingResponse:
                              headers={"Cache-Control": "no-store"})
 
 
+# Redémarrage complet : le backend en dernier (il se redémarre lui-même), la caméra est ignorée si indisponible.
+RESTART_ORDER: tuple[RestartTarget, ...] = ("box", "camera", "vision", "anomaly", "mosquitto", "backend")
+
+
+async def _restart_one(target: RestartTarget, user: UserRow, request: Request) -> None:
+    action = f"Redémarrage demandé : {target}"
+    if target == "box":
+        await _command("reboot", action, user, request)
+    elif target == "camera":
+        await write_audit(user.username, action, client_ip(request), success=False)
+        raise HTTPException(503, "Redémarrage de la caméra indisponible : couper puis rétablir son alimentation.")
+    else:
+        # Jamais de docker.sock dans le backend : le superviseur n'accepte qu'une liste fermée de services.
+        try:
+            await supervisor.restart(target)
+        except supervisor.SupervisorError as e:
+            await write_audit(user.username, action, client_ip(request), success=False)
+            raise HTTPException(503, f"Redémarrage de « {target} » impossible : {e}.") from None
+    await write_audit(user.username, action, client_ip(request))
+    await write_log("warn", "admin", f"Redémarrage de « {target} » demandé par {user.username}")
+
+
 @router.post("/system/restart", status_code=204)
 async def restart(body: RestartIn, request: Request, user: Admin) -> None:
-    action = f"Redémarrage demandé : {body.target}"
-    if body.target == "box":
-        await _command("reboot", action, user, request)
-        await write_audit(user.username, action, client_ip(request))
-        await write_log("warn", "admin", f"Redémarrage du boîtier demandé par {user.username}")
+    if body.target != "all":
+        await _restart_one(body.target, user, request)
         return
-    # Jamais de docker.sock dans le backend : les autres cibles passeront par un superviseur à liste blanche.
-    await write_audit(user.username, action, client_ip(request), success=False)
-    raise HTTPException(503, f"Redémarrage de « {body.target} » indisponible : superviseur pas encore installé.")
+    failed = []
+    for target in RESTART_ORDER:
+        try:
+            await _restart_one(target, user, request)
+        except HTTPException as e:  # reprise sur erreur : les suivants sont quand même redémarrés
+            failed.append(f"{target} ({e.detail})")
+    if failed:
+        await write_log("warn", "admin", "Redémarrage complet, non redémarrés : " + " ; ".join(failed))
 
 
 @router.get("/system/services")
@@ -133,5 +158,15 @@ async def services(_: Admin, db: Db) -> list[ServiceHealth]:
                                  status="ok" if sensor_api.http_ok else "arrete",
                                  uptime_s=sensor_api.uptime_s if sensor_api.http_ok else 0, cpu=0, mem_mb=0,
                                  version=sensor_api.version))
-    # Mosquitto, vision, anomaly, ntfy : remontés par le superviseur quand il existera.
+    # Autres conteneurs de la pile : état fourni par le superviseur (backend et base déjà décrits ci-dessus).
+    try:
+        for s in await supervisor.services():
+            if s["name"] in ("backend", "db"):
+                continue
+            out.append(ServiceHealth(
+                name=s["name"], target=s["name"] if s["restartable"] else None, status=s["status"],
+                uptime_s=s["uptime_s"], cpu=s["cpu"], mem_mb=s["mem_mb"], version=s["version"]))
+    except (supervisor.SupervisorError, KeyError, TypeError, ValueError) as e:
+        out.append(ServiceHealth(name=f"superviseur ({e})"[:60], target=None, status="arrete", uptime_s=0, cpu=0,
+                                 mem_mb=0, version="?"))
     return out

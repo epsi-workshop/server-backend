@@ -29,6 +29,7 @@ HEARTBEAT_TIMEOUT = timedelta(seconds=45)  # 3 heartbeats manqués (un toutes le
 SHOCK_DISPLAY = timedelta(seconds=10)  # durée d'affichage de « choc » sur le dashboard
 PROXIMITY_CM = 50
 WATCHDOG_INTERVAL_S = 5
+MASKED_TIMEOUT = timedelta(seconds=30)  # vision republie « masked » toutes les 10 s tant que l'objectif est masqué
 ANOMALY_TIMEOUT = timedelta(seconds=60)  # le service anomaly publie à chaque télémesure (5 s)
 
 log = logging.getLogger(__name__)
@@ -154,6 +155,7 @@ class VisionWatch:
 
     def __init__(self) -> None:
         self.person_at: datetime | None = None
+        self.masked_at: datetime | None = None  # dernier message « objectif masqué »
 
 
 vision_watch = VisionWatch()
@@ -166,6 +168,9 @@ async def on_vision_detection(topic: str, payload: bytes) -> None:
         return
     if env.type in ("face_known", "face_unknown"):
         await on_face(env)
+        return
+    if env.type == "masked":
+        await on_masked(env)
         return
     if env.type not in ("motion", "person"):
         await write_log("warn", "vision", f"Type de détection inconnu : {clean(env.type, 32)}")
@@ -199,6 +204,30 @@ async def on_vision_detection(topic: str, payload: bytes) -> None:
     elif new_episode:
         await write_log("warn", "vision", f"Mouvement détecté devant la caméra, flux déverrouillé{capture}")
     await _update()
+
+
+async def on_masked(env: Envelope) -> None:
+    """Objectif masqué ou image uniforme (cahier 8.1) : signal « Caméra masquée » tant que ça dure."""
+    try:
+        masked = StateData.model_validate(env.data).state == 1
+    except ValidationError:
+        await _invalid("sentinel/vision/detection", "état de la caméra")
+        return
+    cam = live.state.camera
+    vision_watch.masked_at = utcnow() if masked else None
+    if masked == cam.masked:
+        return
+    cam.masked = masked
+    await _store_event(env, {"state": int(masked)})
+    if masked:
+        await write_log("critical", "vision", "Caméra masquée : image uniforme, plus de preuve visuelle")
+    else:
+        await write_log("info", "vision", "Caméra de nouveau dégagée")
+    await _update()
+
+
+def masked_stale(masked_at: datetime | None, now: datetime) -> bool:
+    return masked_at is not None and now - masked_at > MASKED_TIMEOUT
 
 
 async def on_face(env: Envelope) -> None:
@@ -248,7 +277,14 @@ anomaly_watch = AnomalyWatch()
 
 
 def anomaly_stale(last_seen: datetime | None, now: datetime) -> bool:
+    """Plus de résultat depuis ANOMALY_TIMEOUT : l'état affiché n'est plus à jour (anomalie levée)."""
     return last_seen is not None and now - last_seen > ANOMALY_TIMEOUT
+
+
+def anomaly_silent(last_seen: datetime, last_telemetry: datetime) -> bool:
+    """Le boîtier a continué d'envoyer des mesures sans réponse du service anomaly : il est en panne.
+    (Sans mesures, le service n'a rien à analyser : son silence est normal.)"""
+    return last_telemetry - last_seen > ANOMALY_TIMEOUT
 
 
 async def on_ai_anomaly(topic: str, payload: bytes) -> None:
@@ -444,13 +480,20 @@ async def watchdog() -> None:
             if imu.shock and imu.last_shock and now - imu.last_shock > SHOCK_DISPLAY:
                 imu.shock = False
                 changed = True
+            if live.state.camera.masked and masked_stale(vision_watch.masked_at, now):
+                # Vision ne confirme plus le masquage (service arrêté) : l'état ne doit pas rester figé.
+                live.state.camera.masked = False
+                vision_watch.masked_at = None
+                changed = True
+                await write_log("warn", "vision", "État « caméra masquée » levé : plus de nouvelles du service vision")
             if anomaly_stale(anomaly_watch.last_seen, now):
-                # Service anomaly muet : une anomalie ne doit pas rester levée indéfiniment.
-                anomaly_watch.last_seen = None
+                # Résultat périmé : une anomalie ne doit pas rester levée indéfiniment.
+                last_seen, anomaly_watch.last_seen = anomaly_watch.last_seen, None
                 live.state.anomaly = Anomaly(score=0, is_anomaly=False,
                                              projected_temp15=live.state.sensors.temperature.value, features=[])
                 changed = True
-                await write_log("warn", "anomaly", "Service anomaly muet : aucun résultat depuis 60 s")
+                if anomaly_silent(last_seen, live.state.sensors.temperature.ts):  # type: ignore[arg-type]
+                    await write_log("warn", "anomaly", "Service anomaly muet : mesures reçues sans résultat depuis 60 s")
             if changed:
                 await _update()
         except Exception:  # noqa: BLE001 (la surveillance ne doit jamais s'arrêter)

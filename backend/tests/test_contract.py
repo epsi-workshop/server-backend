@@ -27,7 +27,7 @@ def test_system_state_keys() -> None:
 def test_settings_roundtrip_from_dashboard_json() -> None:
     sent = {
         "weights": {"pir": 20, "proximite": 20, "anomalie": 30, "vision": 40, "choc": 40, "muet": 50, "capot": 60,
-                    "badgeRefuse": 30},
+                    "badgeRefuse": 30, "masque": 50},
         "thresholds": {"alerte": 30, "critique": 70},
         "armedMultiplier": 1.5,
         "occupancy": {"start": "08:00", "end": "19:00", "days": [1, 2, 3, 4, 5]},
@@ -58,7 +58,22 @@ def test_anomaly_service_silence() -> None:
     assert anomaly_stale(now - timedelta(seconds=61), now)
 
 
+def test_anomaly_service_is_down_only_if_telemetry_keeps_coming() -> None:
+    from datetime import timedelta
+
+    from app.ingest import anomaly_silent
+    seen = datetime.now(UTC)
+    assert not anomaly_silent(seen, seen + timedelta(seconds=5))  # boîtier silencieux : rien à analyser
+    assert anomaly_silent(seen, seen + timedelta(seconds=90))  # mesures sans résultat : service en panne
+
+
 def test_motion_flag_from_vision_with_person_detection() -> None:
     from app.ingest import VisionData
     assert VisionData.model_validate({"confidence": 0.6, "snapshot": None, "person_detection": True}).person_detection
     assert not VisionData.model_validate({"confidence": 0.6, "snapshot": None}).person_detection  # ancien vision
+
+
+def test_settings_saved_before_masked_camera_weight_still_load() -> None:
+    old = dump(DEFAULT_SETTINGS)
+    del old["weights"]["masque"]
+    assert Settings.model_validate(old).weights.masque == 50

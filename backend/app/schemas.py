@@ -204,6 +204,7 @@ class Weights(Camel):
     muet: Weight
     capot: Weight
     badge_refuse: Weight
+    masque: Weight = 50  # caméra masquée ; défaut : paramètres enregistrés avant son ajout
 
 
 class Thresholds(Camel):
@@ -227,7 +228,8 @@ class Settings(Camel):
 
 
 DEFAULT_SETTINGS = Settings(
-    weights=Weights(pir=20, proximite=20, anomalie=30, vision=40, choc=40, muet=50, capot=60, badge_refuse=30),
+    weights=Weights(pir=20, proximite=20, anomalie=30, vision=40, choc=40, muet=50, capot=60, badge_refuse=30,
+                    masque=50),
     thresholds=Thresholds(alerte=30, critique=70),
     armed_multiplier=1.5,
     occupancy=Occupancy(start="08:00", end="19:00", days=[1, 2, 3, 4, 5]),
