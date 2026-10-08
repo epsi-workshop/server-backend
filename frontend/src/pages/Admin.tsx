@@ -377,7 +377,7 @@ function BadgesTab() {
 
 // ---------------------------------------------------------------- Détection
 const WEIGHT_LABEL: Record<keyof Settings["weights"], string> = {
-  pir: "Mouvement PIR", proximite: "Objet à moins de 50 cm", vision: "Mouvement détecté par la caméra",
+  pir: "Mouvement PIR", proximite: "Objet à moins de 50 cm", vision: "Détection de la caméra",
   choc: "Choc ou déplacement du boîtier", capot: "Capot ouvert", muet: "Boîtier muet",
   anomalie: "Anomalie environnementale", badgeRefuse: "Badge refusé",
 };

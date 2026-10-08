@@ -5,7 +5,7 @@ Tout le serveur tient dans `docker-compose.yml` (cahier des charges, section 6).
 ## Installation (une seule fois)
 
 ```bash
-scripts/download-face-models.sh     # YuNet + SFace (OpenCV Zoo) dans models/, sommes SHA-256 vérifiées
+scripts/download-face-models.sh     # YuNet, SFace et YOLOX-S (OpenCV Zoo) dans models/, sommes SHA-256 vérifiées
 scripts/gen-pki.sh                  # CA + certificats broker, web, box01, backend, vision, anomaly dans pki/
 scripts/fix-owners.sh               # clés données aux utilisateurs non-root des conteneurs, ACL à mosquitto
 cp .env.example .env && chmod 600 .env
@@ -25,7 +25,7 @@ Redéploiement : `docker compose up -d --build` (ENF-06). `.env`, `pki/`, `model
 | mosquitto | `eclipse-mosquitto:2.0.22` | MQTTS 8883, certificat client obligatoire, CN = identifiant, ACL `mosquitto/acl` |
 | db | `timescale/timescaledb:2.30.2-pg16` | Réseau interne sans accès extérieur, aucun port |
 | backend | build `backend/` | uid 10001, lecture seule, aucune capacité ; écrit la galerie des visages (volume `faces`) |
-| vision | build `vision/` | uid 10002, lecture seule ; seul client de l'ESP32-CAM, mouvement + reconnaissance faciale |
+| vision | build `vision/` | uid 10002, lecture seule ; seul client de l'ESP32-CAM : mouvement, personnes (YOLOX-S), visages |
 | anomaly | build `anomaly/` | uid 10003, lecture seule ; Isolation Forest + projection à +15 min, historique dans le volume `anomaly_data` |
 | frontend | build `frontend/` | nginx, CSP stricte |
 | ntfy | `binwiederhier/ntfy:v2.28.0` | Accès refusé par défaut (`deny-all`), pas d'inscription |

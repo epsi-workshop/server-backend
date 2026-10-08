@@ -139,6 +139,7 @@ services:
       FACE_MODELS_DIR: /models
       FACES_DIR: /faces
       DISPLAY_API_URL: ${DISPLAY_API_URL:-}
+      PERSON_MODEL: /models/object_detection_yolox_2022nov.onnx
     volumes:
       - ./pki/vision:/certs:ro
       - ./models:/models:ro

@@ -35,6 +35,8 @@ class Publisher:
         self.client.connect_async(cfg.mqtt_host, cfg.mqtt_port, keepalive=30)
         self.client.loop_start()
         self._last_seq = 0
+        # Détection de personnes active : le backend ne compte plus un simple mouvement dans le score.
+        self.person_detection = False
 
     def detection(self, kind: Literal["motion", "person", "face_known", "face_unknown"], confidence: float,
                   snapshot: str | None, member_id: str | None = None) -> None:
@@ -47,6 +49,8 @@ class Publisher:
         }
         if member_id:
             payload["data"]["member_id"] = member_id
+        if kind == "motion" and self.person_detection:
+            payload["data"]["person_detection"] = True
         info = self.client.publish(TOPIC, json.dumps(payload), qos=1)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
             log.warning("Détection non publiée (broker injoignable) : %s", mqtt.error_string(info.rc))

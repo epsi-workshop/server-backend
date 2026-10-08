@@ -34,7 +34,7 @@ LABELS: dict[Signal, str] = {
     "pir": "Mouvement PIR",
     "proximite": "Objet à moins de 50 cm",
     "anomalie": "Anomalie environnementale",
-    "vision": "Mouvement détecté par la caméra",
+    "vision": "Détection de la caméra",  # personne confirmée, visage inconnu (ou mouvement sans YOLOX)
     "choc": "Choc ou déplacement du boîtier",
     "muet": "Boîtier muet",
     "capot": "Capot ouvert",

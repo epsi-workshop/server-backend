@@ -56,3 +56,9 @@ def test_anomaly_service_silence() -> None:
     assert not anomaly_stale(None, now)
     assert not anomaly_stale(now - timedelta(seconds=30), now)
     assert anomaly_stale(now - timedelta(seconds=61), now)
+
+
+def test_motion_flag_from_vision_with_person_detection() -> None:
+    from app.ingest import VisionData
+    assert VisionData.model_validate({"confidence": 0.6, "snapshot": None, "person_detection": True}).person_detection
+    assert not VisionData.model_validate({"confidence": 0.6, "snapshot": None}).person_detection  # ancien vision

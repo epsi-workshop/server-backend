@@ -10,6 +10,7 @@ import cv2
 from .config import VERSION, config
 from .faces import DisplayClient, FaceEvents, FaceRecognizer, draw_faces
 from .motion import MotionDetector, MotionResult, annotate
+from .person import Confirmer, PersonDetector, PersonWorker, draw_persons
 from .publisher import Publisher
 from .source import camera_frames
 from .stream import FrameHub, serve
@@ -67,6 +68,18 @@ def main() -> None:
     last_face_check = 0.0
     seen_faces: list = []
 
+    persons = person_confirm = None
+    if config.person_model:
+        persons = PersonWorker(PersonDetector(config.person_model, config.person_input_size, config.person_conf))
+        person_confirm = Confirmer(config.person_confirm, config.person_window)
+        publisher.person_detection = True
+        log.info("Détection de personnes active (YOLOX-S, %d px, confiance %.2f, %d sur %d)", config.person_input_size,
+                 config.person_conf, config.person_confirm, config.person_window)
+    last_person_submit = last_person_analysis = last_person_snapshot = last_person_publish = 0.0
+    seen_persons: list = []
+    person_present = False
+    person_conf = 0.0
+
     try:
         for frame in camera_frames(config.camera_url, config.camera_user, config.camera_password):
             now = datetime.now()
@@ -96,12 +109,39 @@ def main() -> None:
                 new_faces = face_events.update(seen_faces, mono)
             elif faces and mono - last_face_check > 1.0:
                 seen_faces = []  # pas d'analyse récente (rotation) : on n'affiche plus de cadre périmé
+            if persons and person_confirm:
+                # Analyse pendant un mouvement (pré-filtre) ou tant qu'une personne est présente.
+                if (result.moving or person_present) and mono - last_person_submit >= config.person_interval_s \
+                        and not (tracker and tracker.frozen(mono)):
+                    persons.submit(frame.copy())
+                    last_person_submit = mono
+                if (analysis := persons.take()) is not None:
+                    last_person_analysis = analysis.at
+                    seen_persons = analysis.persons
+                    present = person_confirm.update(bool(analysis.persons))
+                    if analysis.persons:
+                        person_conf = max(p.confidence for p in analysis.persons)
+                    if present != person_present:
+                        if present:
+                            log.warning("Personne détectée (confiance %.2f, analyse en %.0f ms)", person_conf, analysis.ms)
+                        else:
+                            log.info("Plus de personne dans le champ")
+                        person_present = present
+                if mono - last_person_analysis > 2.0:
+                    # Plus d'analyse depuis 2 s (fin du mouvement, rotation) : rien de confirmé ni d'affiché.
+                    seen_persons = []
+                    person_confirm.reset()
+                    if person_present:
+                        log.info("Plus de personne dans le champ")
+                        person_present = False
             label = None  # OpenCV n'affiche pas « ° »
             if tracker:
                 label = f"SUIVI {tracker.angle} deg" + (" ..." if tracker.frozen(mono) else "")
             out = annotate(frame, result, now, label, focus)
             if seen_faces:
                 draw_faces(out, seen_faces)
+            if seen_persons:
+                draw_persons(out, seen_persons)
             ok, buf = cv2.imencode(".jpg", out, JPEG_QUALITY)
             if not ok:
                 continue
@@ -118,6 +158,16 @@ def main() -> None:
                     publisher.detection("face_unknown", face.score, snap)
                 if display:
                     display.show(face)
+
+            if person_present:
+                t = now.timestamp()
+                snap = None
+                if t - last_person_snapshot >= config.snapshot_interval_s:
+                    snap = save_snapshot(config.snapshot_dir, jpeg, now, "person")
+                    last_person_snapshot = t
+                if snap or t - last_person_publish >= config.publish_interval_s:
+                    publisher.detection("person", person_conf, snap)
+                    last_person_publish = t
 
             if result.masked != was_masked:
                 log.warning("Objectif masqué ou image uniforme" if result.masked else "Image de nouveau normale")

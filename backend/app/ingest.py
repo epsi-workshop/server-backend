@@ -47,6 +47,8 @@ class VisionData(BaseModel):
     confidence: Annotated[float, Field(ge=0, le=1)]
     snapshot: Annotated[str, Field(pattern=SNAPSHOT_RE.pattern)] | None = None
     member_id: uuid.UUID | None = None  # face_known : membre reconnu (le prénom vient de la base, pas du message)
+    # motion : vision détecte aussi les personnes (YOLOX) ; le mouvement seul ne compte alors pas dans le score.
+    person_detection: bool = False
 
 
 class TelemetryData(BaseModel):
@@ -147,6 +149,17 @@ async def _update() -> None:
 
 
 # ---------------------------------------------------------------- vision
+class VisionWatch:
+    """Dernière personne vue : un seul message au journal par passage, pas un toutes les 2 s."""
+
+    def __init__(self) -> None:
+        self.person_at: datetime | None = None
+
+
+vision_watch = VisionWatch()
+PERSON_EPISODE = timedelta(seconds=60)
+
+
 async def on_vision_detection(topic: str, payload: bytes) -> None:
     env = await _parse(topic, payload)
     if env is None:
@@ -173,11 +186,18 @@ async def on_vision_detection(topic: str, payload: bytes) -> None:
                                                 data=data.model_dump()))
         await db.commit()
 
-    correlator.signal("vision", env.ts, data.snapshot)
-    if new_episode:
-        what = "Personne détectée" if env.type == "person" else "Mouvement détecté devant la caméra"
-        await write_log("warn", "vision", f"{what}, flux déverrouillé"
-                        + (f", capture {data.snapshot}" if data.snapshot else ""))
+    # Barème du cahier (7.8) : « personne confirmée par la vision ». Un mouvement ne compte que si vision
+    # ne sait pas reconnaître une personne (modèle absent) ; sinon il déverrouille seulement le flux.
+    if not (env.type == "motion" and data.person_detection):
+        correlator.signal("vision", env.ts, data.snapshot)
+    capture = f", capture {data.snapshot}" if data.snapshot else ""
+    if env.type == "person":
+        if vision_watch.person_at is None or env.ts - vision_watch.person_at > PERSON_EPISODE:
+            await write_log("warn", "vision", f"Personne détectée (confiance {data.confidence:.0%}){capture}"
+                            .replace("%", " %"))
+        vision_watch.person_at = env.ts
+    elif new_episode:
+        await write_log("warn", "vision", f"Mouvement détecté devant la caméra, flux déverrouillé{capture}")
     await _update()
 
 

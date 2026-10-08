@@ -25,7 +25,7 @@ def test_nothing_is_info() -> None:
 def test_camera_motion_alone_during_office_hours_is_alerte() -> None:
     t = compute_threat({"vision"}, S, armed=False, occupied=True, recent_valid_badge=False)
     assert (t.score, t.level) == (40, "alerte")
-    assert t.reasons == ["Mouvement détecté par la caméra (+40)"]
+    assert t.reasons == ["Détection de la caméra (+40)"]
 
 
 def test_armed_multiplier() -> None:
