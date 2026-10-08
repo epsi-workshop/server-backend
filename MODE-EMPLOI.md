@@ -94,6 +94,20 @@ Il faut que le téléphone soit sur le Wi-Fi du projet.
 
 ## 6. Brancher le boîtier et la caméra (équipe IoT)
 
+### Avec la carte UNO Q sur le partage de connexion (fonctionnement actuel de l'équipe)
+
+La carte UNO Q (« talos ») publie ses capteurs et relaie la caméra sur une petite API web (port 8000). Le serveur va les chercher lui-même :
+
+```bash
+./sentinel carte
+```
+
+La commande trouve la carte sur le partage de connexion (en général `172.20.10.2`) et branche le backend (capteurs : PIR, porte, badge, température) et vision (caméra). À relancer si la carte change d'adresse. Adresse connue : `./sentinel carte 172.20.10.2`. `./sentinel etat` indique si la carte est joignable.
+
+À savoir : cette API n'est ni chiffrée ni protégée par mot de passe (n'importe quel appareil du partage pourrait se faire passer pour la carte), et le service d'anomalies ne reçoit ses mesures que par MQTT. La cible du cahier reste le MQTTS ci-dessous.
+
+### Avec la passerelle MQTTS (cible du cahier des charges)
+
 - **Boîtier** : il se connecte au broker en MQTTS (port 8883) avec **son certificat**. Copiez les 3 fichiers de `pki/box01/` (`ca.crt`, `box01.crt`, `box01.key`) sur le PC de la passerelle (`firmware/gateway/certs/`) ou sur l'UNO Q, avec `MQTT_HOST=192.168.50.10`, `MQTT_PORT=8883`, `MQTT_TLS=true`. Le fichier `box01.key` est secret : ne le mettez jamais dans Git.
 - **Caméra** : l'ESP32-CAM doit être à l'adresse `192.168.50.21`, flux sur `http://192.168.50.21:81/stream`. Autre adresse ou mot de passe : modifiez `CAMERA_URL`, `CAMERA_USER` et `CAMERA_PASSWORD` dans le fichier `.env`, puis `./sentinel redemarrer`.
 - Ça marche quand `./sentinel etat` affiche une heure dans « Dernier signe de vie du boîtier », et qu'un passage devant le PIR apparaît sur le dashboard (jalon 3 du cahier).

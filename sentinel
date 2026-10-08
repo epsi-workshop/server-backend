@@ -20,6 +20,7 @@ ${B}Sentinel-X : commandes du serveur${N}
   ./sentinel journaux [svc]  Journaux en direct (Ctrl+C pour quitter), ex. ./sentinel journaux vision
   ./sentinel identifiants    Adresse du dashboard, comptes et mots de passe
   ./sentinel test            Simule un mouvement du boîtier : alerte + notification de test
+  ./sentinel carte [IP]      Trouve la carte UNO Q sur le partage de connexion et y branche le serveur
   ./sentinel sauvegarde      Copie de la base dans backups/
   ./sentinel mise-a-jour     Récupère le code (git pull), reconstruit et relance
   ./sentinel installer       Première installation complète (ou réparation), sans rien effacer
@@ -64,7 +65,41 @@ etat() {
   cam_err=$(dc logs vision --no-log-prefix --since 2m 2>/dev/null | grep -c "Caméra injoignable" || true)
   if [ "$cam_err" -gt 0 ]; then warn "Caméra (ESP32-CAM) injoignable : vérifier qu'elle est allumée et sur le Wi-Fi"
   else ok "Caméra : pas d'erreur de connexion récente"; fi
+  local api
+  api=$(sed -n 's/^SENSOR_API_URL=//p' .env)
+  if [ -n "$api" ]; then
+    if curl -fsS -m 3 "$api/health" >/dev/null 2>&1; then ok "Carte UNO Q joignable ($api)"
+    else err "Carte UNO Q injoignable ($api) : même partage de connexion ? Sinon ./sentinel carte"; fi
+  fi
   df -h / | awk 'NR==2 {print "  Disque : " $4 " libres sur " $2}'
+}
+
+# Carte UNO Q (API HTTP sur le port 8000) : capteurs lus par le backend, caméra relayée pour vision.
+carte() {
+  local ip="${1:-}"
+  if [ -z "$ip" ]; then
+    echo "Recherche de la carte (port 8000) sur le partage de connexion 172.20.10.0/28…"
+    ip=$(python3 - <<'PY'
+import concurrent.futures as cf, json, urllib.request
+def probe(ip):
+    try:
+        with urllib.request.urlopen(f"http://{ip}:8000/health", timeout=1.5) as r:
+            return ip if json.load(r).get("status") == "ok" else None
+    except Exception:
+        return None
+with cf.ThreadPoolExecutor(14) as ex:
+    print(next((ip for ip in ex.map(probe, [f"172.20.10.{i}" for i in range(1, 15)]) if ip), ""))
+PY
+)
+  fi
+  if [ -z "$ip" ] || ! curl -fsS -m 3 "http://$ip:8000/health" >/dev/null 2>&1; then
+    err "Carte introuvable. Est-elle allumée et sur le même partage de connexion ? Sinon : ./sentinel carte <adresse IP>"
+    exit 1
+  fi
+  sed -i "s|^SENSOR_API_URL=.*|SENSOR_API_URL=http://$ip:8000|; s|^CAMERA_URL=.*|CAMERA_URL=http://$ip:8000/camera/stream|" .env
+  ok "Carte trouvée sur $ip : capteurs et caméra branchés"
+  dc up -d backend vision >/dev/null 2>&1
+  attendre_backend && ok "Backend et vision relancés : les données arrivent sur le dashboard"
 }
 
 journaux() { dc logs -f --tail 30 "$@"; }
@@ -146,6 +181,7 @@ case "${1:-aide}" in
   journaux|logs) shift; journaux "$@" ;;
   identifiants) identifiants ;;
   test) test_chaine ;;
+  carte) shift; carte "${1:-}" ;;
   sauvegarde|backup) sauvegarde ;;
   mise-a-jour|update) mise_a_jour ;;
   installer|install) installer ;;
