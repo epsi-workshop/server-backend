@@ -61,7 +61,7 @@ def test_door_state_translated_on_change(sent: list[tuple[str, dict[str, Any]]])
 
     async def scenario() -> None:
         for is_open in (False, True, True, False):
-            await api._apply_sensors({"lid": {"open": is_open, "source": "simulation"}})
+            await api._apply_sensors({"lid": {"open": is_open, "source": "capteur"}})
 
     run(scenario())
     assert sent == [("lid_open", {"state": 0}), ("lid_open", {"state": 1}), ("lid_open", {"state": 0})]
@@ -79,7 +79,7 @@ def test_badge_passes_translated(sent: list[tuple[str, dict[str, Any]]]) -> None
 
     async def scenario() -> None:
         for seq, uid in ((3, "DEADBEEF"), (4, "04a1b2c3"), (4, "04a1b2c3"), (5, "04A1B2C3")):
-            await api._apply_sensors({"rfid": {"seq": seq, "uid": uid, "source": "simulation"}})
+            await api._apply_sensors({"rfid": {"seq": seq, "uid": uid, "source": "lecteur"}})
 
     run(scenario())
     assert sent == [("rfid_ok", {"uid": "04:A1:B2:C3"}), ("rfid_ok", {"uid": "04:A1:B2:C3"})]
@@ -95,3 +95,62 @@ def test_badge_counter_reset_is_new_reference(sent: list[tuple[str, dict[str, An
 
     run(scenario())
     assert sent == [("rfid_ok", {"uid": "04:A1:B2:C3"})]
+
+
+@pytest.fixture
+def journal(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    lines: list[str] = []
+
+    async def spy(_level: str, _source: str, message: str) -> None:
+        lines.append(message)
+
+    monkeypatch.setattr(sensor_api, "write_log", spy)
+    return lines
+
+
+def test_simulated_badge_is_ignored(sent: list[tuple[str, dict[str, Any]]], journal: list[str]) -> None:
+    """Route /sensors/rfid/simulate de la carte (sans authentification) : le badge ne doit rien désarmer."""
+    api = sensor_api.SensorApi("http://x")
+
+    async def scenario() -> None:
+        await api._set_rfid(15, "1BE2E34A", "lecteur")  # référence au démarrage
+        await api._set_rfid(16, "1BE2E34A", "simulation")
+        await api._set_rfid(17, "1BE2E34A", "lecteur")
+
+    run(scenario())
+    assert sent == [("rfid_ok", {"uid": "1B:E2:E3:4A"})]
+    assert any("simulé" in line for line in journal)
+
+
+def test_simulated_door_keeps_last_real_state(sent: list[tuple[str, dict[str, Any]]], journal: list[str]) -> None:
+    api = sensor_api.SensorApi("http://x")
+
+    async def scenario() -> None:
+        await api._set_lid(True, "capteur")  # porte réellement ouverte
+        await api._set_lid(False, "simulation")  # quelqu'un la fait passer pour fermée
+        await api._set_lid(False, "simulation")
+        await api._set_lid(False, "capteur")  # vraie fermeture
+
+    run(scenario())
+    assert sent == [("lid_open", {"state": 1}), ("lid_open", {"state": 0})]
+    assert sum("simulation" in line for line in journal) == 1  # signalé une seule fois
+
+
+def test_simulation_allowed_for_tests(sent: list[tuple[str, dict[str, Any]]], monkeypatch: pytest.MonkeyPatch,
+                                      journal: list[str]) -> None:
+    monkeypatch.setattr(sensor_api.config, "sensor_api_allow_simulation", True)
+    api = sensor_api.SensorApi("http://x")
+
+    async def scenario() -> None:
+        await api._set_rfid(1, "1BE2E34A", "simulation")
+        await api._set_rfid(2, "1BE2E34A", "simulation")
+
+    run(scenario())
+    assert sent == [("rfid_ok", {"uid": "1B:E2:E3:4A"})]
+
+
+def test_token_sent_to_the_card(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sensor_api.config, "sensor_api_token", "s3cret")
+    assert sensor_api.SensorApi("http://x").headers == {"Authorization": "Bearer s3cret"}
+    monkeypatch.setattr(sensor_api.config, "sensor_api_token", "")
+    assert sensor_api.SensorApi("http://x").headers == {}

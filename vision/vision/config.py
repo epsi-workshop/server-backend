@@ -67,6 +67,7 @@ class Config(BaseSettings):
     face_min_px: int = 40  # visage plus petit (trop loin) ignoré
     face_interval_s: float = 0.3  # au plus une analyse toutes les 0,3 s
     face_cooldown_s: float = 30.0  # une même personne signalée au plus toutes les 30 s
+    api_token: str = ""  # jeton de l'API de l'UNO Q (servo, écran), envoyé en « Authorization: Bearer »
     display_api_url: str = ""  # écran OLED de l'UNO Q, ex. http://talos.local:8000 ; vide = pas d'écran
     display_seconds: int = 5
 

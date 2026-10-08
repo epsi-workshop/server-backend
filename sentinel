@@ -84,6 +84,15 @@ etat() {
   df -h / | awk 'NR==2 {print "  Disque : " $4 " libres sur " $2}'
 }
 
+# Jeton partagé avec l'API de la carte (API_TOKEN dans ~/sensor-api/.env de la carte), créé s'il manque.
+jeton_carte() {
+  grep -q '^UNOQ_API_TOKEN=' .env || echo 'UNOQ_API_TOKEN=' >> .env
+  if ! grep -q '^UNOQ_API_TOKEN=.' .env; then
+    sed -i "s/^UNOQ_API_TOKEN=.*/UNOQ_API_TOKEN=$(openssl rand -hex 24)/" .env
+    ok "Jeton de la carte créé (à copier sur la carte : ./sentinel identifiants)"
+  fi
+}
+
 # Carte UNO Q (API HTTP sur le port 8000) : capteurs lus par le backend, caméra relayée pour vision.
 carte() {
   local ip="${1:-}"
@@ -106,7 +115,11 @@ PY
     err "Carte introuvable. Est-elle allumée et sur le même partage de connexion ? Sinon : ./sentinel carte <adresse IP>"
     exit 1
   fi
-  sed -i "s|^SENSOR_API_URL=.*|SENSOR_API_URL=http://$ip:8000|; s|^CAMERA_URL=.*|CAMERA_URL=http://$ip:8000/camera/stream|" .env
+  jeton_carte
+  local token
+  token=$(sed -n 's/^UNOQ_API_TOKEN=//p' .env)
+  # Caméra relayée par la carte : authentification Basic, le jeton comme mot de passe (api/security.py de la carte)
+  sed -i "s|^SENSOR_API_URL=.*|SENSOR_API_URL=http://$ip:8000|; s|^CAMERA_URL=.*|CAMERA_URL=http://$ip:8000/camera/stream|; s|^CAMERA_USER=.*|CAMERA_USER=sentinel|; s|^CAMERA_PASSWORD=.*|CAMERA_PASSWORD=$token|" .env
   ok "Carte trouvée sur $ip : capteurs et caméra branchés"
   dc up -d backend vision >/dev/null 2>&1
   attendre_backend && ok "Backend et vision relancés : les données arrivent sur le dashboard"
@@ -119,6 +132,9 @@ identifiants() {
   [ -f .admin-password ] && echo "  compte admin, mot de passe : $(cat .admin-password)" || warn "  pas de .admin-password : ./sentinel installer"
   echo "${B}Notifications (application ntfy du téléphone)${N} : serveur https://ntfy.sentinel.lan, topic sentinel-alertes"
   [ -f .ntfy-operateur-password ] && echo "  compte operateur, mot de passe : $(cat .ntfy-operateur-password)"
+  local token
+  token=$(sed -n 's/^UNOQ_API_TOKEN=//p' .env)
+  [ -n "$token" ] && echo "${B}Jeton de la carte UNO Q${N} (API_TOKEN dans ~/sensor-api/.env de la carte) : $token"
   echo "${B}Certificat à installer sur les téléphones et PC${N} : $(pwd)/pki/ca.crt"
   echo "${B}Certificat du boîtier${N} : $(pwd)/pki/box01/ (ca.crt, box01.crt, box01.key)"
   warn "Ne partagez ces mots de passe qu'avec l'équipe."
@@ -169,7 +185,8 @@ installer() {
     (umask 077
      sed -e "s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" \
          -e "s/^SUPERVISOR_TOKEN=$/SUPERVISOR_TOKEN=$(openssl rand -hex 32)/" \
-         -e "s/^DOCKER_GID=.*/DOCKER_GID=$(getent group docker | cut -d: -f3)/" .env.example > .env)
+         -e "s/^DOCKER_GID=.*/DOCKER_GID=$(getent group docker | cut -d: -f3)/" \
+         -e "s/^UNOQ_API_TOKEN=$/UNOQ_API_TOKEN=$(openssl rand -hex 24)/" .env.example > .env)
     ok ".env créé (mots de passe aléatoires)"
   fi
   dc up -d --build --remove-orphans

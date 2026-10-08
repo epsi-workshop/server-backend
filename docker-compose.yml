@@ -101,6 +101,8 @@ services:
       CAMERA_URL: http://vision:8081/stream
       SNAPSHOT_DIR: /snapshots
       SENSOR_API_URL: ${SENSOR_API_URL:-}
+      SENSOR_API_TOKEN: ${UNOQ_API_TOKEN:-}
+      SENSOR_API_ALLOW_SIMULATION: ${SENSOR_API_ALLOW_SIMULATION:-false}
       FACE_MODELS_DIR: /models
       FACES_DIR: /faces
       NTFY_URL: http://ntfy:80
@@ -145,6 +147,7 @@ services:
       FACE_MODELS_DIR: /models
       FACES_DIR: /faces
       DISPLAY_API_URL: ${DISPLAY_API_URL:-}
+      API_TOKEN: ${UNOQ_API_TOKEN:-}
       PERSON_MODEL: /models/object_detection_yolox_2022nov.onnx
     volumes:
       - ./pki/vision:/certs:ro

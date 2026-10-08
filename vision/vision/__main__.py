@@ -47,7 +47,7 @@ def main() -> None:
 
     tracker = servo = None
     if config.servo_api_url:
-        servo = ServoClient(config.servo_api_url)
+        servo = ServoClient(config.servo_api_url, config.api_token)
         tracker = Tracker(
             fov_deg=config.track_fov_deg, deadband=config.track_deadband, gain=config.track_gain,
             speed=config.track_speed, settle_s=config.track_settle_s, min_interval_s=config.track_min_interval_s,
@@ -65,7 +65,7 @@ def main() -> None:
                                config.face_threshold, config.face_min_px)
         face_events = FaceEvents(cooldown_s=config.face_cooldown_s)
         if config.display_api_url:
-            display = DisplayClient(config.display_api_url, config.display_seconds)
+            display = DisplayClient(config.display_api_url, config.display_seconds, config.api_token)
         log.info("Reconnaissance faciale active (seuil %.3f)%s", config.face_threshold,
                  f", écran {config.display_api_url}" if display else "")
     last_face_check = 0.0

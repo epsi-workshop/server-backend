@@ -36,6 +36,10 @@ class Config(BaseSettings):
     # API capteurs de l'UNO Q (sensor_api.py), ex. http://talos.local:8000 (sans route : sensor_api.py les ajoute). Vide = désactivée.
     # Ne pas l'utiliser en même temps que la passerelle MQTT du même boîtier (deux sources pour un PIR).
     sensor_api_url: str = ""
+    # Jeton de l'API de l'UNO Q (variable API_TOKEN de la carte), envoyé en « Authorization: Bearer ». Vide = aucun.
+    sensor_api_token: str = ""
+    # Badges et porte « simulés » par l'API de la carte (routes /simulate, sans authentification) : ignorés sauf essai.
+    sensor_api_allow_simulation: bool = False
 
     # Flux MJPEG annoté rediffusé par le service vision (seul lecteur de l'ESP32-CAM).
     camera_url: str = "http://vision:8081/stream"
