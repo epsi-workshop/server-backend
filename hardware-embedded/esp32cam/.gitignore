@@ -1,0 +1,4 @@
+# Identifiants Wi-Fi locaux
+secrets.h
+# Outils téléchargés par les scripts de flash
+.tools/
