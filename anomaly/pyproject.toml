@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sentinel-x-anomaly"
+version = "0.1.0"
+description = "Service anomaly Sentinel-X : Isolation Forest sur les mesures du boîtier, projection de température à +15 min"
+requires-python = ">=3.12"
+dependencies = [
+  "numpy~=2.1",
+  "scikit-learn~=1.6",
+  "paho-mqtt~=2.1",
+  "pydantic-settings~=2.6",
+  "tzdata",  # fuseaux horaires pour zoneinfo (absents de l'image slim)
+]
+
+[project.optional-dependencies]
+dev = ["pytest~=8.3"]
+
+[tool.setuptools.packages.find]
+include = ["anomaly*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -36,3 +36,23 @@ def test_settings_roundtrip_from_dashboard_json() -> None:
     }
     assert dump(Settings.model_validate(sent)) == sent
     assert dump(DEFAULT_SETTINGS) == sent
+
+
+def test_anomaly_result_from_service() -> None:
+    from app.ingest import AnomalyData
+    data = AnomalyData.model_validate({
+        "score": 0.71, "is_anomaly": True, "projected_temp15": 27.4,
+        "features": ["variation de température sur 5 min"], "model_trained_at": "2026-10-08T01:00:00.000Z",
+        "model_hours": 6.2,
+    })
+    assert data.is_anomaly and data.projected_temp15 == 27.4
+
+
+def test_anomaly_service_silence() -> None:
+    from datetime import timedelta
+
+    from app.ingest import anomaly_stale
+    now = datetime.now(UTC)
+    assert not anomaly_stale(None, now)
+    assert not anomaly_stale(now - timedelta(seconds=30), now)
+    assert anomaly_stale(now - timedelta(seconds=61), now)

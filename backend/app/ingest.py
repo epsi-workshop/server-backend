@@ -1,6 +1,6 @@
 """Ingestion MQTT (#15) : validation, anti-rejeu, écriture en base, mise à jour de l'état.
 
-Topics : sentinel/vision/detection et sentinel/<boîtier>/{telemetry,event,heartbeat,status}.
+Topics : sentinel/vision/detection, sentinel/ai/anomaly et sentinel/<boîtier>/{telemetry,event,heartbeat,status}.
 """
 import asyncio
 import json
@@ -21,7 +21,7 @@ from .db import BadgeRow, SessionLocal, TeamMemberRow, events, measurements
 from .journal import write_log
 from .live import live
 from .mqtt import Handler
-from .schemas import Detection, Distance, FaceSighting, Reading
+from .schemas import Anomaly, Detection, Distance, FaceSighting, Reading
 from .util import clean, utcnow
 
 SNAPSHOT_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}\.jpg$")
@@ -31,6 +31,7 @@ HEARTBEAT_TIMEOUT = timedelta(seconds=45)  # 3 heartbeats manqués (un toutes le
 SHOCK_DISPLAY = timedelta(seconds=10)  # durée d'affichage de « choc » sur le dashboard
 PROXIMITY_CM = 50
 WATCHDOG_INTERVAL_S = 5
+ANOMALY_TIMEOUT = timedelta(seconds=60)  # le service anomaly publie à chaque télémesure (5 s)
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +61,15 @@ class HeartbeatData(BaseModel):
     uptime: Annotated[int, Field(ge=0)] = 0
     rssi: Annotated[int, Field(ge=-120, le=0)] = 0
     firmware: Annotated[str, Field(max_length=32)] | None = None
+
+
+class AnomalyData(BaseModel):
+    score: Annotated[float, Field(ge=0, le=1)]
+    is_anomaly: bool
+    projected_temp15: Annotated[float, Field(ge=-40, le=125)] | None = None
+    features: Annotated[list[Annotated[str, Field(max_length=120)]], Field(max_length=8)] = []
+    model_trained_at: AwareDatetime | None = None
+    model_hours: Annotated[float, Field(ge=0)] | None = None
 
 
 class StateData(BaseModel):
@@ -204,6 +214,56 @@ async def on_face(env: Envelope) -> None:
         correlator.signal("vision", env.ts, data.snapshot)
         await write_log("critical", "vision", "Intrus détecté : visage inconnu"
                         + (f", capture {data.snapshot}" if data.snapshot else ""))
+    await _update()
+
+
+# ---------------------------------------------------------------- anomalies (service anomaly)
+class AnomalyWatch:
+    """Dernier résultat du service anomaly : sert à détecter son silence et ses réentraînements."""
+
+    def __init__(self) -> None:
+        self.last_seen: datetime | None = None
+        self.trained_at: datetime | None = None
+
+
+anomaly_watch = AnomalyWatch()
+
+
+def anomaly_stale(last_seen: datetime | None, now: datetime) -> bool:
+    return last_seen is not None and now - last_seen > ANOMALY_TIMEOUT
+
+
+async def on_ai_anomaly(topic: str, payload: bytes) -> None:
+    env = await _parse(topic, payload, "anomaly")
+    if env is None:
+        return
+    if env.type != "anomaly":
+        await _invalid(topic, "type")
+        return
+    try:
+        data = AnomalyData.model_validate(env.data)
+    except ValidationError:
+        await _invalid(topic, "résultat d'anomalie")
+        return
+
+    was = live.state.anomaly.is_anomaly
+    features = [clean(f, 120) for f in data.features]
+    projected = data.projected_temp15 if data.projected_temp15 is not None else live.state.sensors.temperature.value
+    live.state.anomaly = Anomaly(score=data.score, is_anomaly=data.is_anomaly, projected_temp15=projected,
+                                 features=features)
+    anomaly_watch.last_seen = utcnow()
+
+    if data.model_trained_at and data.model_trained_at != anomaly_watch.trained_at:
+        anomaly_watch.trained_at = data.model_trained_at
+        await write_log("info", "anomaly", "Modèle Isolation Forest entraîné sur "
+                        f"{data.model_hours or 0:.1f} h de mesures".replace(".", ","))
+    if data.is_anomaly == was:
+        return  # état poussé au dashboard par live.run() toutes les 2 s
+    if data.is_anomaly:
+        await _store_event(env, data.model_dump(mode="json"))
+        await write_log("warn", "anomaly", "Anomalie environnementale : " + (", ".join(features) or "score élevé"))
+    else:
+        await write_log("info", "anomaly", "Mesures revenues à la normale")
     await _update()
 
 
@@ -352,7 +412,7 @@ async def on_box_status(topic: str, payload: bytes) -> None:
 
 
 async def watchdog() -> None:
-    """Boîtier muet (3 heartbeats manqués) et fin de l'affichage « choc »."""
+    """Boîtier muet (3 heartbeats manqués), fin de l'affichage « choc », service anomaly muet."""
     while True:
         await asyncio.sleep(WATCHDOG_INTERVAL_S)
         try:
@@ -366,6 +426,13 @@ async def watchdog() -> None:
             if imu.shock and imu.last_shock and now - imu.last_shock > SHOCK_DISPLAY:
                 imu.shock = False
                 changed = True
+            if anomaly_stale(anomaly_watch.last_seen, now):
+                # Service anomaly muet : une anomalie ne doit pas rester levée indéfiniment.
+                anomaly_watch.last_seen = None
+                live.state.anomaly = Anomaly(score=0, is_anomaly=False,
+                                             projected_temp15=live.state.sensors.temperature.value, features=[])
+                changed = True
+                await write_log("warn", "anomaly", "Service anomaly muet : aucun résultat depuis 60 s")
             if changed:
                 await _update()
         except Exception:  # noqa: BLE001 (la surveillance ne doit jamais s'arrêter)
@@ -375,6 +442,7 @@ async def watchdog() -> None:
 _box = f"sentinel/{config.device_id}"
 HANDLERS: dict[str, Handler] = {
     "sentinel/vision/detection": on_vision_detection,
+    "sentinel/ai/anomaly": on_ai_anomaly,
     f"{_box}/telemetry": on_box_telemetry,
     f"{_box}/event": on_box_event,
     f"{_box}/heartbeat": on_box_heartbeat,
