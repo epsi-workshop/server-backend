@@ -2,7 +2,8 @@
 # Installe l'API capteurs sur un Arduino UNO Q, depuis un Mac ou un PC Linux.
 # Prérequis : carte configurée avec Arduino App Lab (nom, Wi-Fi, mot de passe Linux)
 #             et clé SSH autorisée : ssh-copy-id arduino@<nom>.local
-# Usage : ./setup.sh [hôte]      (défaut : talos.local)
+# Usage : API_TOKEN=<jeton> ./setup.sh [hôte]      (défaut : talos.local)
+#         Le jeton (même valeur que UNOQ_API_TOKEN du serveur) est écrit dans ~/sensor-api/.env de la carte.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -34,6 +35,13 @@ cd ~/sensor-api
 uv pip install -q --python .venv/bin/python -r requirements.txt
 chmod +x ~/cam-wifi.sh
 EOF
+
+echo "==> Jeton de l'API (~/sensor-api/.env, chmod 600)"
+if [ -n "${API_TOKEN:-}" ]; then
+  printf 'API_TOKEN=%s\nALLOW_SIMULATION=0\n' "$API_TOKEN" | $SSH 'umask 077; cat > ~/sensor-api/.env'
+else
+  echo "ATTENTION : API_TOKEN vide, l'API reste ouverte à tout le réseau (voir api/security.py)." >&2
+fi
 
 echo "==> Sketch du microcontrôleur (compilation + flash)"
 $SSH 'bash -s' <<'EOF'
@@ -67,5 +75,5 @@ sleep 5
 
 echo "==> Test"
 curl -sf -m 10 "http://$HOST:8000/health" && echo
-curl -sf -m 10 "http://$HOST:8000/sensors" && echo
+curl -sf -m 10 -H "Authorization: Bearer ${API_TOKEN:-}" "http://$HOST:8000/sensors" && echo
 echo "OK : http://$HOST:8000/docs"

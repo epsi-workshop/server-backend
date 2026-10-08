@@ -74,7 +74,11 @@ Nouveau client MQTT : `scripts/gen-pki.sh <nom>`, l'ajouter à `mosquitto/acl`, 
 
 ## API HTTP de l'UNO Q (`SENSOR_API_URL`, `SERVO_API_URL`, `DISPLAY_API_URL`)
 
-Vides par défaut : le boîtier passe par MQTTS (certificat `box01`). Les renseigner (adresse IP, les noms `.local` ne sont pas résolus dans les conteneurs) fait lire capteurs, porte et badge en **HTTP sans TLS ni authentification**, et pousse l'armement par `POST /system/armed/on|off` : n'importe quel poste du réseau peut alors se faire passer pour le boîtier. Contraire à ENF-07 ; à réserver aux essais tant que l'API de l'UNO Q n'est pas protégée.
+Vides par défaut : le boîtier passe par MQTTS (certificat `box01`). `./sentinel carte` les renseigne (adresse IP : les noms `.local` ne sont pas résolus dans les conteneurs) pour lire capteurs, porte et badge sur l'API HTTP de la carte et pousser l'armement par `POST /system/armed/on|off`.
+
+- Jeton : `UNOQ_API_TOKEN` (créé par `./sentinel carte`) est envoyé à la carte en `Authorization: Bearer` (backend, servo, écran) et en mot de passe Basic du flux caméra relayé (`CAMERA_USER` / `CAMERA_PASSWORD`). La carte ne l'exige qu'une fois `api/security.py` installé (`hardware-embedded/uno-q/README.md`, « Sécurité ») : à faire, sinon l'API reste ouverte à tout le réseau.
+- Badges et état de porte marqués `"source": "simulation"` (routes `/simulate` de la carte, sans authentification) : ignorés et journalisés, sauf `SENSOR_API_ALLOW_SIMULATION=true` pour un essai.
+- Reste en HTTP clair sur le Wi-Fi : le jeton peut être capturé par un appareil qui connaît le mot de passe du partage. Cible du cahier (ENF-07) : MQTTS avec le certificat `box01`.
 
 ## Reste à faire côté hôte (droits administrateur)
 

@@ -1,4 +1,5 @@
-fastapi
-uvicorn[standard]
-msgpack
-httpx
+# Versions épinglées (mêmes séries que le backend) : une mise à jour ne s'installe pas sans qu'on la choisisse.
+fastapi~=0.115.0
+uvicorn[standard]~=0.32.0
+msgpack~=1.1.0
+httpx~=0.28.0

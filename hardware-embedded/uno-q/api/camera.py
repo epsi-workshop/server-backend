@@ -14,6 +14,9 @@ import httpx
 
 # Adresses essayées dans l'ordre : client d'un Wi-Fi (mDNS) puis point d'accès de la caméra
 CAM_HOSTS = os.environ.get("ESP32CAM_HOST", "esp32cam.local,192.168.4.1").split(",")
+# Authentification HTTP Basic de l'ESP32-CAM (CAM_USER / CAM_PASSWORD de son secrets.h), dans ~/sensor-api/.env
+CAM_AUTH = (os.environ.get("ESP32CAM_USER", "sentinel"), os.environ["ESP32CAM_PASSWORD"]) \
+    if os.environ.get("ESP32CAM_PASSWORD") else None
 BOUNDARY = b"frame"
 _LEN_RE = re.compile(rb"Content-Length:\s*(\d+)", re.I)
 
@@ -33,7 +36,7 @@ class CameraHub:
     async def _find_host(self) -> str:
         """Renvoie la première adresse où la caméra répond."""
         candidates = [self.host] + CAM_HOSTS if self.host else CAM_HOSTS
-        async with httpx.AsyncClient(timeout=2) as client:
+        async with httpx.AsyncClient(auth=CAM_AUTH, timeout=2) as client:
             for host in dict.fromkeys(candidates):
                 with contextlib.suppress(Exception):
                     (await client.get(f"http://{host}/status")).raise_for_status()
@@ -56,7 +59,7 @@ class CameraHub:
 
     async def _run_capture(self, host: str):
         self.mode = "capture"
-        async with httpx.AsyncClient(timeout=5) as client:
+        async with httpx.AsyncClient(auth=CAM_AUTH, timeout=5) as client:
             while self.viewers > 0:
                 r = await client.get(f"http://{host}/capture")
                 r.raise_for_status()
@@ -64,7 +67,7 @@ class CameraHub:
                 await self._publish(r.content)
 
     async def _run_stream(self, host: str):
-        async with httpx.AsyncClient(timeout=httpx.Timeout(10, connect=3, read=3)) as client:
+        async with httpx.AsyncClient(auth=CAM_AUTH, timeout=httpx.Timeout(10, connect=3, read=3)) as client:
             async with client.stream("GET", f"http://{host}:81/stream") as resp:
                 resp.raise_for_status()
                 self.error = None
@@ -119,7 +122,7 @@ class CameraHub:
         if self.viewers > 0 and self.frame and time.time() - self.frame_ts < 2:
             return self.frame
         host = await self._find_host()
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(auth=CAM_AUTH, timeout=10) as client:
             r = await client.get(f"http://{host}/capture")
             r.raise_for_status()
             return r.content
@@ -130,7 +133,7 @@ class CameraHub:
         with contextlib.suppress(Exception):
             host = await self._find_host()
             info["host"] = host
-            async with httpx.AsyncClient(timeout=3) as client:
+            async with httpx.AsyncClient(auth=CAM_AUTH, timeout=3) as client:
                 info["camera"] = (await client.get(f"http://{host}/status")).json()
         info.setdefault("camera", None)
         return info

@@ -46,12 +46,57 @@ ssh-copy-id arduino@talos.local
 ### 3. Lancer l'installation
 
 ```bash
-./setup.sh talos.local
+API_TOKEN=<jeton du serveur> ./setup.sh talos.local
 ```
+
+Le jeton est celui du serveur Sentinel-X (`./sentinel identifiants`, ligne « Jeton de la carte UNO Q »). Sans lui,
+l'API reste ouverte à tout le réseau (voir « Sécurité » ci-dessous).
 
 Le script copie les fichiers, crée l'environnement Python avec `uv` (sans sudo),
 compile et flashe le microcontrôleur (en vérifiant qu'il répond via le Bridge),
 active le service et teste l'API. Durée : 3 à 5 minutes.
+
+## Sécurité (api/security.py)
+
+Sans protection, n'importe quel appareil du Wi-Fi (ou une page web piégée ouverte par un opérateur, à cause
+du CORS « * ») peut simuler un badge et **désarmer le système**, faire passer la porte pour fermée, regarder
+la caméra et piloter le servo ou l'écran. `security.py` ajoute :
+
+- un **jeton obligatoire** sur toutes les routes sauf `/health`, WebSocket `/ws/pir` compris : en-tête
+  `Authorization: Bearer <jeton>` (backend, vision) ou authentification Basic avec le jeton comme mot de passe
+  (navigateur sur `/live`, lecteurs du flux `/camera/stream`) ;
+- les **routes `/simulate` fermées** (403), sauf `ALLOW_SIMULATION=1` pour un essai sans matériel ;
+- plus de CORS « * » : seules les origines de `ALLOWED_ORIGINS` peuvent lire l'API depuis un navigateur.
+
+Le backend ignore de son côté tout badge ou état de porte marqué `"source": "simulation"`.
+
+### Activer la protection sur une carte déjà installée
+
+La version qui tourne sur la carte est plus récente que `api/main.py` (routes `/sensors/rfid`, `/sensors/lid`,
+`/system/armed`, `/display/badge`) : **ajouter cette version au dépôt**, puis, dans son `main.py`, remplacer la
+ligne `app.add_middleware(CORSMiddleware, allow_origins=["*"], …)` par :
+
+```python
+from security import install
+install(app)
+```
+
+Sur la carte (`ssh arduino@talos.local`) :
+
+```bash
+cd ~/sensor-api   # après y avoir copié api/security.py et le main.py modifié
+printf 'API_TOKEN=<jeton du serveur>\nALLOW_SIMULATION=0\nESP32CAM_PASSWORD=<CAM_PASSWORD de la caméra>\n' > .env
+chmod 600 .env
+```
+
+Copier aussi `sensor-api.service` (ligne `EnvironmentFile`), puis :
+
+```bash
+systemctl --user daemon-reload && systemctl --user restart sensor-api
+```
+
+Vérifier : `curl http://talos.local:8000/sensors` répond 401, et `./sentinel etat` sur le serveur indique toujours la
+carte joignable avec les données sur le dashboard (le serveur envoie déjà le jeton). Tests : `python -m pytest tests`.
 
 ## Branchements
 

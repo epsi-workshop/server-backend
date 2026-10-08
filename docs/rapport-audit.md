@@ -19,7 +19,9 @@ Ce brouillon couvre les tests réalisés **depuis le PC serveur** le 8 octobre 2
 | 10 | Caméra masquée | Flux simulé : image uniforme pendant 20 s | Alerte en quelques secondes | ✔ « Sabotage du boîtier » (Critique la nuit) 2 s après le masquage, notification envoyée |
 | 11 | Intrusion visuelle | Flux simulé : personne dans le champ | Critique ≤ 5 s avec capture | ✔ Personne confirmée 2,3 s après le mouvement ; alerte avec capture ; notification avec la capture jointe |
 | 12 | Images Docker | Trivy `--severity HIGH,CRITICAL --ignore-unfixed` | Aucune faille corrigible | ✔ après correction (voir plus bas), sauf TimescaleDB (risque accepté) |
-| 13 | Secrets dans Git | gitleaks sur tout l'historique | Aucun | ✔ « no leaks found » (9 commits) ; `.env`, `pki/`, mots de passe ignorés par Git |
+| 13 | Secrets dans Git | gitleaks sur tout l'historique | Aucun | ✔ « no leaks found » ; `esp32cam/secrets.h` commité ne contient que les valeurs d'exemple (vérifié) ; `.env`, `pki/`, mots de passe ignorés par Git |
+| 14 | API HTTP de la carte UNO Q (`openapi.json` de la carte en service) | Lecture de la documentation de l'API, sans appeler les routes d'écriture | Authentification | ✘ Aucune authentification ; `POST /sensors/rfid/simulate/{uid}` et `/sensors/lid/simulate/{state}` ouverts ; CORS « * ». Un badge simulé avec l'UID d'un badge enregistré désarme le système. Corrigé côté serveur (simulation ignorée), correctif carte à installer (voir plus bas) |
+| 15 | Flux de l'ESP32-CAM | Lecture du firmware | Authentification (cahier 7.6) | ✘ `/capture`, `:81/stream`, `/status` sans authentification, CORS « * ». Correctif firmware écrit et compilé (à flasher) |
 
 ## Corrections apportées pendant l'audit
 
@@ -30,6 +32,11 @@ Ce brouillon couvre les tests réalisés **depuis le PC serveur** le 8 octobre 2
 | ntfy v2.28.0 : 2 graves (libssl3) | v2.29.0 |
 | Un simple mouvement devant la caméra valait 40 points (ombre, reflet = fausse alerte, ENF-05) | Détection de personnes YOLOX ; seul une personne confirmée (3 analyses sur 5) compte |
 | Captures conservées sans limite (ENF-09, RGPD) | Rétention : sans alerte supprimées après 15 min, d'alerte après `retentionDays` |
+| API de la carte : badge et porte « simulables » sans authentification (désarmement à distance) | Backend : valeurs `source: simulation` ignorées et journalisées (`SENSOR_API_ALLOW_SIMULATION=false`) ; jeton `UNOQ_API_TOKEN` envoyé à la carte |
+| API de la carte : aucune authentification, CORS « * », WebSocket ouvert | `hardware-embedded/uno-q/api/security.py` : jeton (Bearer ou Basic), routes `/simulate` fermées, CORS limité, middleware ASGI (WebSocket compris) ; 6 tests. **À installer sur la carte** |
+| ESP32-CAM sans authentification | Firmware : HTTP Basic en temps constant (`CAM_USER` / `CAM_PASSWORD`), CORS retiré ; compilation refusée avec le mot de passe d'exemple ; relais `camera.py` authentifié. Compilé pour `esp32:esp32:esp32cam` (33 % de la flash). **À flasher** |
+| Dépendances de l'API de la carte non épinglées | `requirements.txt` épinglé (mêmes séries que le backend) |
+| `esp32cam/secrets.h` suivi par Git (un vrai mot de passe y serait commité) | Retiré du suivi, `secrets.h` ignoré partout |
 | Objectif masqué seulement écrit dans le journal de vision | Signal « Caméra masquée » au backend, alerte |
 
 ## Risques acceptés ou ouverts
@@ -41,6 +48,12 @@ Ce brouillon couvre les tests réalisés **depuis le PC serveur** le 8 octobre 2
 | API HTTP de l'UNO Q (`SENSOR_API_URL`) sans TLS ni authentification, pilote l'armement | Désactivée par défaut (le boîtier passe par MQTTS) ; à protéger avant usage |
 | Badges MIFARE Classic clonables ; un passage désarme | Connu (cahier 8.1) : désarmement journalisé et notifié ; démonstration du clonage à ajouter ici |
 | Superviseur : accès au socket Docker = root sur l'hôte | Réduit : liste blanche figée, jeton, réseau interne, non-root, lecture seule, sans capacité |
+| API de la carte en HTTP clair sur le partage de connexion | Jeton capturable par un appareil qui connaît le mot de passe Wi-Fi : cible MQTTS (ENF-07) |
+| Code de l'API en service sur la carte absent du dépôt (plus récent que `hardware-embedded/uno-q/api/main.py`) | À commiter pour pouvoir l'auditer et y installer `security.py` |
+| Scripts d'installation (`setup.sh`, `flash.sh`) : `curl … \| sh` depuis Internet, sans vérification | Faible (poste de développement) : préférer une version publiée avec somme de contrôle |
+| `cam-wifi.sh` : mot de passe Wi-Fi en argument de `nmcli` (visible dans la liste des processus de la carte) | Faible (carte mono-utilisateur) |
+| Copies en double : `esp32cam/` et `esp32cam.zip` à la racine, plus anciens que `hardware-embedded/esp32cam/` (sans authentification) | À supprimer pour ne pas flasher l'ancienne version |
+| `.claude/launch.json` : chemins du poste d'un membre de l'équipe | Sans risque, inutile dans le dépôt |
 | Pare-feu de l'hôte et fail2ban non configurés (droits administrateur) | À faire (DEPLOIEMENT.md) |
 
 ## Reste à tester (réseau dédié et matériel)

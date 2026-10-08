@@ -2,6 +2,8 @@
 //   http://<ip>/capture      -> une photo JPEG
 //   http://<ip>:81/stream    -> flux MJPEG en direct
 //   http://<ip>/status       -> infos JSON
+// Authentification HTTP Basic sur les trois routes (CAM_USER / CAM_PASSWORD de secrets.h, cahier 7.6) :
+// sans elle, tout appareil du Wi-Fi peut regarder la salle.
 // Deux modes (voir secrets.h) :
 //   - point d'accès (WIFI_AP_MODE) : la caméra crée son propre Wi-Fi, IP fixe 192.168.4.1
 //   - client : la caméra rejoint un Wi-Fi existant, joignable via esp32cam.local
@@ -9,10 +11,17 @@
 #include <ESPmDNS.h>
 #include "esp_camera.h"
 #include "esp_http_server.h"
-#include "secrets.h"  // WIFI_SSID / WIFI_PASSWORD / WIFI_AP_MODE
+#include "mbedtls/base64.h"
+#include "secrets.h"  // WIFI_SSID / WIFI_PASSWORD / WIFI_AP_MODE / CAM_USER / CAM_PASSWORD
 
 static_assert(sizeof(WIFI_PASSWORD) - 1 >= 8,
               "WIFI_PASSWORD doit faire au moins 8 caracteres (exigence WPA2)");
+#if !defined(CAM_USER) || !defined(CAM_PASSWORD)
+#error "Definir CAM_USER et CAM_PASSWORD dans secrets.h (authentification du flux, voir secrets.example.h)"
+#endif
+static_assert(sizeof(CAM_PASSWORD) - 1 >= 12, "CAM_PASSWORD doit faire au moins 12 caracteres");
+constexpr bool sameText(const char *a, const char *b) { return *a == *b && (*a == '\0' || sameText(a + 1, b + 1)); }
+static_assert(!sameText(CAM_PASSWORD, "a-remplacer-12car"), "Remplacer CAM_PASSWORD dans secrets.h (valeur d'exemple)");
 
 // Brochage AI-Thinker
 #define PWDN_GPIO_NUM  32
@@ -40,23 +49,52 @@ static const char *STREAM_PART = "\r\n--" BOUNDARY "\r\nContent-Type: image/jpeg
 httpd_handle_t mainServer = NULL;
 httpd_handle_t streamServer = NULL;
 
+// « Basic <base64(CAM_USER:CAM_PASSWORD)> », calculé une fois au démarrage
+static char expectedAuth[160];
+
+static void initAuth() {
+  const char *creds = CAM_USER ":" CAM_PASSWORD;
+  size_t olen = 0;
+  strcpy(expectedAuth, "Basic ");
+  mbedtls_base64_encode((unsigned char *)expectedAuth + 6, sizeof(expectedAuth) - 7, &olen,
+                        (const unsigned char *)creds, strlen(creds));
+  expectedAuth[6 + olen] = '\0';
+}
+
+// Comparaison en temps constant : la durée de la réponse ne renseigne pas sur le mot de passe
+static bool authorized(httpd_req_t *req) {
+  char got[sizeof(expectedAuth)] = {0};
+  if (httpd_req_get_hdr_value_str(req, "Authorization", got, sizeof(got)) != ESP_OK) return false;
+  size_t n = strlen(expectedAuth);
+  if (strlen(got) != n) return false;
+  unsigned char diff = 0;
+  for (size_t i = 0; i < n; i++) diff |= (unsigned char)(got[i] ^ expectedAuth[i]);
+  return diff == 0;
+}
+
+static esp_err_t deny(httpd_req_t *req) {
+  httpd_resp_set_status(req, "401 Unauthorized");
+  httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"esp32cam\"");
+  return httpd_resp_send(req, NULL, 0);
+}
+
 static esp_err_t capture_handler(httpd_req_t *req) {
+  if (!authorized(req)) return deny(req);
   camera_fb_t *fb = esp_camera_fb_get();
   if (!fb) {
     httpd_resp_send_500(req);
     return ESP_FAIL;
   }
   httpd_resp_set_type(req, "image/jpeg");
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   esp_err_t res = httpd_resp_send(req, (const char *)fb->buf, fb->len);
   esp_camera_fb_return(fb);
   return res;
 }
 
 static esp_err_t stream_handler(httpd_req_t *req) {
+  if (!authorized(req)) return deny(req);
   char part[128];
   esp_err_t res = httpd_resp_set_type(req, STREAM_TYPE);
-  httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
   while (res == ESP_OK) {
     camera_fb_t *fb = esp_camera_fb_get();
     if (!fb) {
@@ -72,6 +110,7 @@ static esp_err_t stream_handler(httpd_req_t *req) {
 }
 
 static esp_err_t status_handler(httpd_req_t *req) {
+  if (!authorized(req)) return deny(req);
   char json[192];
 #ifdef WIFI_AP_MODE
   snprintf(json, sizeof(json),
@@ -89,6 +128,7 @@ static esp_err_t status_handler(httpd_req_t *req) {
 }
 
 void startServers() {
+  initAuth();
   httpd_config_t config = HTTPD_DEFAULT_CONFIG();
   config.server_port = 80;
   httpd_uri_t capture = {"/capture", HTTP_GET, capture_handler, NULL};

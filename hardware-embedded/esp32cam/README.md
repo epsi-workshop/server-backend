@@ -18,6 +18,8 @@ d'appareils connectés à la fois (4 au maximum) et n'a pas d'accès Internet.
 
 ## Endpoints
 
+Les trois routes demandent l'identifiant et le mot de passe de `secrets.h` (un navigateur les demande).
+
 | URL | Description |
 |---|---|
 | `http://<adresse>:81/stream` | Flux vidéo en direct (MJPEG) |
@@ -56,10 +58,16 @@ cp secrets.example.h secrets.h
 Puis édite `secrets.h` :
 
 ```c
+#define CAM_USER      "sentinel"
+#define CAM_PASSWORD  "…"                // 12 caractères minimum : openssl rand -base64 12
 #define WIFI_AP_MODE                     // à commenter pour le mode client
 #define WIFI_SSID     "nom-du-wifi"
 #define WIFI_PASSWORD "mot-de-passe"     // 8 caractères minimum
 ```
+
+`CAM_USER` / `CAM_PASSWORD` protègent la photo, le flux et l'état (authentification HTTP Basic, cahier 7.6).
+La compilation s'arrête si `CAM_PASSWORD` est absent, trop court ou laissé à la valeur d'exemple. Le même mot de
+passe va dans `~/sensor-api/.env` de l'UNO Q (`ESP32CAM_PASSWORD=…`), qui relaie le flux.
 
 Le mot de passe doit faire **au moins 8 caractères** (exigence WPA2) : sinon la
 compilation s'arrête avec un message explicite. `secrets.h` est ignoré par git :
