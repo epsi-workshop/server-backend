@@ -17,6 +17,8 @@ models/
 .env
 .admin-password
 .ntfy-*-password
+# Sauvegardes de la base (./sentinel sauvegarde)
+backups/
 gateway.env
 pki/
 certs/

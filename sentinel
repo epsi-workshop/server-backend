@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+# Sentinel-X : pilotage du serveur en une commande. ./sentinel aide
+set -euo pipefail
+cd "$(dirname "$(readlink -f "$0")")"
+
+B=$'\e[1m'; G=$'\e[32m'; R=$'\e[31m'; Y=$'\e[33m'; N=$'\e[0m'
+ok()   { echo "${G}✔${N} $*"; }
+warn() { echo "${Y}!${N} $*"; }
+err()  { echo "${R}✘${N} $*" >&2; }
+dc()   { docker compose "$@"; }
+
+aide() {
+  cat <<EOF
+${B}Sentinel-X : commandes du serveur${N}
+
+  ./sentinel demarrer        Lance la supervision (tous les services)
+  ./sentinel arreter         Arrête tout (les données sont conservées)
+  ./sentinel redemarrer      Arrête puis relance tout
+  ./sentinel etat            État des services et vérifications rapides
+  ./sentinel journaux [svc]  Journaux en direct (Ctrl+C pour quitter), ex. ./sentinel journaux vision
+  ./sentinel identifiants    Adresse du dashboard, comptes et mots de passe
+  ./sentinel test            Simule un mouvement du boîtier : alerte + notification de test
+  ./sentinel sauvegarde      Copie de la base dans backups/
+  ./sentinel mise-a-jour     Récupère le code (git pull), reconstruit et relance
+  ./sentinel installer       Première installation complète (ou réparation), sans rien effacer
+EOF
+}
+
+attendre_backend() {
+  for _ in $(seq 60); do
+    dc ps backend --format '{{.Status}}' 2>/dev/null | grep healthy >/dev/null && return 0
+    sleep 2
+  done
+  return 1
+}
+
+demarrer() {
+  dc up -d --remove-orphans
+  echo "Démarrage en cours…"
+  if attendre_backend; then
+    ok "Supervision lancée : ouvrez ${B}https://localhost${N} (sur ce PC) ou ${B}https://192.168.50.10${N} (réseau dédié)"
+  else
+    err "Le backend ne répond pas : ./sentinel journaux backend"
+    exit 1
+  fi
+}
+
+arreter() { dc stop; ok "Supervision arrêtée (données conservées). Relancer : ./sentinel demarrer"; }
+
+etat() {
+  dc ps --format 'table {{.Service}}\t{{.Status}}'
+  echo
+  if curl -fsS --cacert pki/ca.crt https://localhost/api/health >/dev/null 2>&1; then
+    ok "Dashboard joignable en HTTPS (https://localhost)"
+  else
+    err "Dashboard injoignable en HTTPS"
+  fi
+  if dc logs mosquitto --no-log-prefix 2>/dev/null | grep "as backend" >/dev/null; then ok "Backend connecté au broker MQTT (TLS)"; else warn "Backend pas encore connecté au broker"; fi
+  local hb
+  hb=$(dc exec -T db psql -U "${POSTGRES_USER:-sentinel}" -d sentinel -tAc \
+       "select coalesce(to_char(max(time) at time zone 'Europe/Paris', 'DD/MM HH24:MI:SS'), 'jamais') from events where device='box01' and type='heartbeat'" 2>/dev/null || echo "?")
+  echo "  Dernier signe de vie du boîtier : ${B}${hb}${N}"
+  local cam_err
+  cam_err=$(dc logs vision --no-log-prefix --since 2m 2>/dev/null | grep -c "Caméra injoignable" || true)
+  if [ "$cam_err" -gt 0 ]; then warn "Caméra (ESP32-CAM) injoignable : vérifier qu'elle est allumée et sur le Wi-Fi"
+  else ok "Caméra : pas d'erreur de connexion récente"; fi
+  df -h / | awk 'NR==2 {print "  Disque : " $4 " libres sur " $2}'
+}
+
+journaux() { dc logs -f --tail 30 "$@"; }
+
+identifiants() {
+  echo "${B}Dashboard${N} : https://localhost (ce PC) ou https://192.168.50.10 (réseau dédié)"
+  [ -f .admin-password ] && echo "  compte admin, mot de passe : $(cat .admin-password)" || warn "  pas de .admin-password : ./sentinel installer"
+  echo "${B}Notifications (application ntfy du téléphone)${N} : serveur https://ntfy.sentinel.lan, topic sentinel-alertes"
+  [ -f .ntfy-operateur-password ] && echo "  compte operateur, mot de passe : $(cat .ntfy-operateur-password)"
+  echo "${B}Certificat à installer sur les téléphones et PC${N} : $(pwd)/pki/ca.crt"
+  echo "${B}Certificat du boîtier${N} : $(pwd)/pki/box01/ (ca.crt, box01.crt, box01.key)"
+  warn "Ne partagez ces mots de passe qu'avec l'équipe."
+}
+
+test_chaine() {
+  local now seq
+  seq=$(date +%s%3N); now=$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)
+  echo "Envoi d'un faux mouvement PIR au nom du boîtier box01 (MQTTS, certificat box01)…"
+  docker run --rm --network host -v "$PWD/pki/box01:/c:ro" eclipse-mosquitto:2.0.22 mosquitto_pub \
+    -h localhost -p 8883 --cafile /c/ca.crt --cert /c/box01.crt --key /c/box01.key -q 1 -t sentinel/box01/event \
+    -m "{\"device\":\"box01\",\"seq\":$seq,\"ts\":\"$now\",\"type\":\"pir\",\"data\":{\"state\":1}}"
+  sleep 4
+  local menace
+  menace=$(curl -fsS --cacert pki/ca.crt https://localhost/api/health >/dev/null 2>&1 && dc exec -T db psql -U "${POSTGRES_USER:-sentinel}" -d sentinel -tAc \
+    "select level || ' : ' || title || ' (score ' || score || ', ' || to_char(ts at time zone 'Europe/Paris','HH24:MI:SS') || ')' from alerts where ts > now() - interval '2 minutes' order by ts desc limit 1")
+  if [ -n "$menace" ]; then
+    ok "Alerte en cours, ${menace} : page Alertes du dashboard, notification sur les téléphones abonnés"
+    echo "  (une alerte ouverte depuis moins de 90 s est mise à jour plutôt que dupliquée)"
+  else
+    warn "Pas d'alerte : normal si le système est désarmé pendant les horaires d'occupation (PIR seul = 20 points,"
+    echo "  sous le seuil de 30). Le mouvement apparaît quand même sur le dashboard (carte Présence)."
+  fi
+}
+
+sauvegarde() {
+  mkdir -p backups
+  local f="backups/sentinel-$(date +%Y%m%d-%H%M%S).dump"
+  dc exec -T db pg_dump -U "${POSTGRES_USER:-sentinel}" -Fc sentinel > "$f"
+  chmod 600 "$f"
+  ok "Base sauvegardée dans $f ($(du -h "$f" | cut -f1))"
+}
+
+mise_a_jour() {
+  git pull --ff-only
+  bash scripts/download-face-models.sh
+  dc build
+  dc pull --ignore-buildable 2>/dev/null || true
+  demarrer
+}
+
+installer() {
+  command -v docker >/dev/null || { err "Docker n'est pas installé"; exit 1; }
+  bash scripts/download-face-models.sh
+  [ -f pki/ca.key ] && ok "PKI déjà présente" || scripts/gen-pki.sh
+  scripts/fix-owners.sh
+  if [ ! -f .env ]; then
+    (umask 077
+     sed -e "s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" \
+         -e "s/^SUPERVISOR_TOKEN=$/SUPERVISOR_TOKEN=$(openssl rand -hex 32)/" \
+         -e "s/^DOCKER_GID=.*/DOCKER_GID=$(getent group docker | cut -d: -f3)/" .env.example > .env)
+    ok ".env créé (mots de passe aléatoires)"
+  fi
+  dc up -d --build --remove-orphans
+  attendre_backend || { err "Le backend ne démarre pas : ./sentinel journaux backend"; exit 1; }
+  if [ ! -f .admin-password ]; then
+    (umask 077; openssl rand -base64 18 | tr -d '\n' > .admin-password)
+    dc exec -T backend python -m app.cli create-admin admin --password-stdin < .admin-password
+  fi
+  scripts/setup-ntfy.sh
+  ok "Installation terminée."
+  identifiants
+}
+
+case "${1:-aide}" in
+  demarrer|start) demarrer ;;
+  arreter|stop) arreter ;;
+  redemarrer|restart) dc stop; demarrer ;;
+  etat|status) etat ;;
+  journaux|logs) shift; journaux "$@" ;;
+  identifiants) identifiants ;;
+  test) test_chaine ;;
+  sauvegarde|backup) sauvegarde ;;
+  mise-a-jour|update) mise_a_jour ;;
+  installer|install) installer ;;
+  *) aide ;;
+esac

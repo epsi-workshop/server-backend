@@ -1,8 +1,12 @@
 # Sentinel-X : déploiement du PC serveur
 
+Mode d'emploi au quotidien : [MODE-EMPLOI.md](MODE-EMPLOI.md) (commande `./sentinel`). Ce document-ci décrit l'installation et l'architecture.
+
 Tout le serveur tient dans `docker-compose.yml` (cahier des charges, section 6). Ports publiés : **443** (Caddy, dashboard + API + ntfy) et **8883** (Mosquitto, MQTTS). Base, backend, vision, anomaly, frontend et ntfy ne sont joignables que par les réseaux Docker internes.
 
 ## Installation (une seule fois)
+
+`./sentinel installer` fait tout ce qui suit (et peut être relancé sans rien effacer). Détail :
 
 ```bash
 scripts/download-face-models.sh     # YuNet, SFace et YOLOX-S (OpenCV Zoo) dans models/, sommes SHA-256 vérifiées
@@ -27,10 +31,11 @@ Redéploiement : `docker compose up -d --build` (ENF-06). `.env`, `pki/`, `model
 | backend | build `backend/` | uid 10001, lecture seule, aucune capacité ; écrit la galerie des visages (volume `faces`) |
 | vision | build `vision/` | uid 10002, lecture seule ; seul client de l'ESP32-CAM : mouvement, personnes (YOLOX-S), visages |
 | anomaly | build `anomaly/` | uid 10003, lecture seule ; Isolation Forest + projection à +15 min, historique dans le volume `anomaly_data` |
+| supervisor | build `supervisor/` | uid 10004, seul accès au socket Docker : état des conteneurs et redémarrage de vision, anomaly, mosquitto, backend (liste figée), jeton, réseau interne `supervision` joignable par le backend seul |
 | frontend | build `frontend/` | nginx, CSP stricte |
 | ntfy | `binwiederhier/ntfy:v2.28.0` | Accès refusé par défaut (`deny-all`), pas d'inscription |
 
-Volumes partagés : `snapshots` (vision écrit, backend lit), `faces` (backend écrit `gallery.json`, vision lit), `models/` en lecture seule pour les deux.
+Volumes partagés : `snapshots` (vision écrit ; le backend lit et applique la rétention par le groupe 10010), `faces` (backend écrit `gallery.json`, vision lit), `models/` en lecture seule pour les deux.
 
 ## Service anomaly
 
@@ -45,6 +50,17 @@ Volumes partagés : `snapshots` (vision écrit, backend lit), `faces` (backend �
 - Le backend publie chaque alerte Alerte ou Critique (création et escalade) sur le topic `sentinel-alertes`, capture de la caméra en pièce jointe, lien vers la page Alertes du dashboard (`backend/app/notify.py`).
 - Compte `backend` en écriture seule (jeton `NTFY_TOKEN` dans `.env`), compte `operateur` en lecture seule (mot de passe dans `.ntfy-operateur-password`), tout autre accès refusé.
 - Téléphone : application ntfy, serveur `https://ntfy.sentinel.lan`, topic `sentinel-alertes`, compte `operateur`. Il faut que le nom `ntfy.sentinel.lan` soit déclaré dans le DNS du routeur (vers 192.168.50.10) et que le téléphone fasse confiance à `pki/ca.crt`.
+
+## Sécurité des images (Trivy, gitleaks)
+
+- Images de base épinglées et à jour : `python:3.13.16-slim-bookworm`, `nginx:1.30.5-alpine` (+ `apk upgrade`), `node:24.21.0-alpine` (build), `binwiederhier/ntfy:v2.29.0`. `pip` est retiré des images finales.
+- Scan du 8 octobre 2026 (`--severity HIGH,CRITICAL --ignore-unfixed`) : 0 faille sur backend, vision, anomaly, supervisor, frontend, caddy, mosquitto, ntfy. Risque accepté : `timescale/timescaledb:2.30.2-pg16` (dernière version) garde 3 critiques et 79 graves dans ses outils (binaires Go, python3 d'Alpine), non exposés : la base n'a aucun port et n'est joignable que par le backend.
+- gitleaks sur tout l'historique : aucun secret.
+
+```bash
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image --severity HIGH,CRITICAL --ignore-unfixed sentinel-x/backend:0.2.0
+docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks git /repo
+```
 
 ## Certificats
 

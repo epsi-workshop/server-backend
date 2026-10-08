@@ -73,6 +73,12 @@ Modèle : `scripts/download-face-models.sh` (`models/object_detection_yolox_2022
   mouvement dans le score (il déverrouille seulement le flux), seule une personne confirmée vaut les 40 points du
   cahier (7.8). Sans modèle, le mouvement compte comme avant.
 
+## Objectif masqué
+
+Image uniforme (écart-type des niveaux de gris sous 6) pendant 2 s : message `masked` (`{"state": 1}`), republié
+toutes les 10 s tant que ça dure, puis `{"state": 0}` quand l'image revient. Le backend en fait le signal
+« Caméra masquée » (50 points, alerte « Sabotage du boîtier »).
+
 ## Reconnaissance faciale
 
 Les membres de l'équipe sont ajoutés dans le dashboard (Administration > Équipe : prénom et photo de face).
@@ -104,5 +110,4 @@ Variables : `FACE_MODELS_DIR=../models` (vide = désactivée), `FACES_DIR=../fac
 
 ## Reste à faire
 
-- Publier l'état « objectif masqué » au backend (`camera.masked`).
-- Purge des anciennes captures (rétention).
+- Redémarrage de l'ESP32-CAM à distance (aujourd'hui : couper puis rétablir son alimentation).
