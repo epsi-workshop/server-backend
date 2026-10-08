@@ -1,0 +1,22 @@
+# ACL Mosquitto (cahier des charges, 8.3). Identifiant = CN du certificat client.
+# Tout ce qui n'est pas listé est refusé.
+
+user box01
+topic write sentinel/box01/telemetry
+topic write sentinel/box01/event
+topic write sentinel/box01/heartbeat
+topic write sentinel/box01/status
+topic read sentinel/box01/cmd
+
+user backend
+topic read sentinel/#
+topic write sentinel/+/cmd
+
+user vision
+topic read sentinel/+/event
+topic write sentinel/vision/detection
+
+user anomaly
+topic read sentinel/+/telemetry
+topic read sentinel/+/event
+topic write sentinel/ai/anomaly
