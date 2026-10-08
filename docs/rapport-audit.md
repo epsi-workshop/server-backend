@@ -36,7 +36,7 @@ Ce brouillon couvre les tests réalisés **depuis le PC serveur** le 8 octobre 2
 | API de la carte : aucune authentification, CORS « * », WebSocket ouvert | `hardware-embedded/uno-q/api/security.py` : jeton (Bearer ou Basic), routes `/simulate` fermées, CORS limité, middleware ASGI (WebSocket compris) ; 6 tests. **À installer sur la carte** |
 | ESP32-CAM sans authentification | Firmware : HTTP Basic en temps constant (`CAM_USER` / `CAM_PASSWORD`), CORS retiré ; compilation refusée avec le mot de passe d'exemple ; relais `camera.py` authentifié. Compilé pour `esp32:esp32:esp32cam` (33 % de la flash). **À flasher** |
 | Dépendances de l'API de la carte non épinglées | `requirements.txt` épinglé (mêmes séries que le backend) |
-| `esp32cam/secrets.h` suivi par Git (un vrai mot de passe y serait commité) | Retiré du suivi, `secrets.h` ignoré partout |
+| `esp32cam/secrets.h` suivi par Git (un vrai mot de passe y serait commité) | Supprimé avec la copie obsolète, `secrets.h` ignoré partout |
 | Objectif masqué seulement écrit dans le journal de vision | Signal « Caméra masquée » au backend, alerte |
 
 ## Risques acceptés ou ouverts
@@ -52,7 +52,7 @@ Ce brouillon couvre les tests réalisés **depuis le PC serveur** le 8 octobre 2
 | Code de l'API en service sur la carte absent du dépôt (plus récent que `hardware-embedded/uno-q/api/main.py`) | À commiter pour pouvoir l'auditer et y installer `security.py` |
 | Scripts d'installation (`setup.sh`, `flash.sh`) : `curl … \| sh` depuis Internet, sans vérification | Faible (poste de développement) : préférer une version publiée avec somme de contrôle |
 | `cam-wifi.sh` : mot de passe Wi-Fi en argument de `nmcli` (visible dans la liste des processus de la carte) | Faible (carte mono-utilisateur) |
-| Copies en double : `esp32cam/` et `esp32cam.zip` à la racine, plus anciens que `hardware-embedded/esp32cam/` (sans authentification) | À supprimer pour ne pas flasher l'ancienne version |
+| Copies en double : `esp32cam/` et `esp32cam.zip` à la racine, plus anciens que `hardware-embedded/esp32cam/` (sans authentification), avec `secrets.h` suivi par Git | Supprimés (la version à jour est `hardware-embedded/esp32cam/`) |
 | `.claude/launch.json` : chemins du poste d'un membre de l'équipe | Sans risque, inutile dans le dépôt |
 | Pare-feu de l'hôte et fail2ban non configurés (droits administrateur) | À faire (DEPLOIEMENT.md) |
 
