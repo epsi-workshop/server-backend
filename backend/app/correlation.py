@@ -19,6 +19,7 @@ from .hub import hub
 from .journal import write_log
 from .live import live
 from .mqtt import CommandError, send_command
+from .notify import notify
 from .schemas import Settings, SystemState, Threat, ThreatLevel, dump
 from .util import utcnow
 
@@ -202,6 +203,8 @@ class Correlator:
         elif plan.raise_level or plan.better_title:
             await write_log("critical" if threat.level == "critique" else "warn", "backend",
                             f"Alerte escaladée : {alert.title} (score {alert.score})")
+        if plan.create or plan.raise_level:
+            notify(alert, escalated=not plan.create)  # push Alerte et Critique (EF-09), capture jointe
         if (plan.create or plan.raise_level) and threat.level == "critique" and live.state.device.armed:
             try:
                 if await send_command("buzzer_on"):

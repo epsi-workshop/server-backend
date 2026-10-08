@@ -5,7 +5,6 @@ Topics : sentinel/vision/detection, sentinel/ai/anomaly et sentinel/<boîtier>/{
 import asyncio
 import json
 import logging
-import re
 import uuid
 from collections import deque
 from datetime import datetime, timedelta
@@ -22,9 +21,8 @@ from .journal import write_log
 from .live import live
 from .mqtt import Handler
 from .schemas import Anomaly, Detection, Distance, FaceSighting, Reading
-from .util import clean, utcnow
+from .util import SNAPSHOT_RE, clean, utcnow
 
-SNAPSHOT_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}\.jpg$")
 MAX_AGE = timedelta(minutes=5)
 MAX_FUTURE = timedelta(minutes=1)  # tolérance de décalage d'horloge (NTP)
 HEARTBEAT_TIMEOUT = timedelta(seconds=45)  # 3 heartbeats manqués (un toutes les 15 s)

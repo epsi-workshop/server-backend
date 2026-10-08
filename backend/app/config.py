@@ -44,6 +44,13 @@ class Config(BaseSettings):
     # Captures enregistrées par le service vision (volume partagé "snapshots").
     snapshot_dir: Path = Path("/snapshots")
 
+    # Notifications push (notify.py) : serveur ntfy, topic des alertes et jeton en écriture seule
+    # (scripts/setup-ntfy.sh). NTFY_URL vide = désactivées. Lien du dashboard ouvert depuis la notification.
+    ntfy_url: str = ""
+    ntfy_topic: str = "sentinel-alertes"
+    ntfy_token: str = ""
+    dashboard_url: str = "https://sentinel.lan"
+
     # Reconnaissance faciale (faces.py) : modèles OpenCV Zoo et galerie lue par le service vision (volume partagé).
     face_models_dir: Path = Path("/models")
     faces_dir: Path = Path("/faces")

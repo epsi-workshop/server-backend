@@ -12,9 +12,10 @@ cp .env.example .env && chmod 600 .env
 sed -i "s/^POSTGRES_PASSWORD=$/POSTGRES_PASSWORD=$(openssl rand -hex 24)/" .env
 docker compose up -d --build
 docker compose exec backend python -m app.cli create-admin admin   # mot de passe de 12 caractères minimum
+scripts/setup-ntfy.sh               # comptes ntfy : backend (écriture, jeton dans .env), operateur (lecture)
 ```
 
-Redéploiement : `docker compose up -d --build` (ENF-06). `.env`, `pki/`, `models/` et `.admin-password` ne sont jamais commités.
+Redéploiement : `docker compose up -d --build` (ENF-06). `.env`, `pki/`, `models/`, `.admin-password` et `.ntfy-operateur-password` ne sont jamais commités.
 
 ## Services
 
@@ -38,6 +39,12 @@ Volumes partagés : `snapshots` (vision écrit, backend lit), `faces` (backend �
 - Variables : température, humidité, variations sur 5 min, déclenchements PIR sur 1 h, puis heure (dès 24 h d'historique) et jour de la semaine (dès 7 jours) pour éviter les fausses alertes.
 - Anomalie confirmée sur 3 mesures parmi 5. Projection : régression linéaire sur 30 min, alerte si la température projetée à +15 min dépasse `TEMP_LIMIT` (27 °C).
 - Ne voit que la télémétrie MQTT : avec `SENSOR_API_URL` (capteurs relus en HTTP par le backend), il ne reçoit rien.
+
+## Notifications push (ntfy)
+
+- Le backend publie chaque alerte Alerte ou Critique (création et escalade) sur le topic `sentinel-alertes`, capture de la caméra en pièce jointe, lien vers la page Alertes du dashboard (`backend/app/notify.py`).
+- Compte `backend` en écriture seule (jeton `NTFY_TOKEN` dans `.env`), compte `operateur` en lecture seule (mot de passe dans `.ntfy-operateur-password`), tout autre accès refusé.
+- Téléphone : application ntfy, serveur `https://ntfy.sentinel.lan`, topic `sentinel-alertes`, compte `operateur`. Il faut que le nom `ntfy.sentinel.lan` soit déclaré dans le DNS du routeur (vers 192.168.50.10) et que le téléphone fasse confiance à `pki/ca.crt`.
 
 ## Certificats
 

@@ -3,6 +3,7 @@
 #   scripts/gen-pki.sh && scripts/fix-owners.sh        # PKI, une seule fois
 #   cp .env.example .env && chmod 600 .env             # puis renseigner POSTGRES_PASSWORD
 #   docker compose up -d --build
+#   scripts/setup-ntfy.sh                              # comptes ntfy, jeton du backend (notifications)
 #
 # Ports publiés : 443 (Caddy, HTTPS) et 8883 (Mosquitto, MQTTS). Rien d'autre n'est joignable de l'extérieur.
 # Chaque service ne reçoit que ses propres variables (pas d'env_file commun : le mot de passe de la base
@@ -99,6 +100,10 @@ services:
       SENSOR_API_URL: ${SENSOR_API_URL:-}
       FACE_MODELS_DIR: /models
       FACES_DIR: /faces
+      NTFY_URL: http://ntfy:80
+      NTFY_TOPIC: ${NTFY_TOPIC:-sentinel-alertes}
+      NTFY_TOKEN: ${NTFY_TOKEN:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-https://sentinel.lan}
     volumes:
       - ./pki/backend:/certs:ro
       - ./models:/models:ro
@@ -181,6 +186,8 @@ services:
       NTFY_ENABLE_LOGIN: "true"
       NTFY_ENABLE_SIGNUP: "false"
       NTFY_UPSTREAM_BASE_URL: ""
+      # Captures jointes aux alertes, servies aux téléphones (expirent après 3 h).
+      NTFY_ATTACHMENT_CACHE_DIR: /var/cache/ntfy/attachments
     volumes:
       - ntfy_cache:/var/cache/ntfy
       - ntfy_data:/var/lib/ntfy
