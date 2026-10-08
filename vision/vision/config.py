@@ -52,6 +52,14 @@ class Config(BaseSettings):
     track_home_angle: int = 90  # position de repos
     track_home_after_s: float = 20.0  # retour au repos sans mouvement (0 = jamais)
 
+    # Détection de personnes (person.py, YOLOX-S). Vide = désactivée : le mouvement seul compte dans le score.
+    person_model: Path | None = None  # ex. ../models/object_detection_yolox_2022nov.onnx
+    person_input_size: int = 416  # 320 plus rapide, 640 plus précis (cahier : « résolution 320 ou 416 »)
+    person_conf: float = 0.5  # confiance minimale d'une personne
+    person_interval_s: float = 0.2  # au plus 5 analyses par seconde pendant un mouvement (ENF-04)
+    person_confirm: int = 3  # personne confirmée sur 3 analyses…
+    person_window: int = 5  # …parmi les 5 dernières
+
     # Reconnaissance faciale (faces.py). Vide = désactivée. Galerie écrite par le backend (même dossier).
     face_models_dir: Path | None = None  # ex. ../models (scripts/download-face-models.sh)
     faces_dir: Path = Path("/faces")
@@ -59,10 +67,12 @@ class Config(BaseSettings):
     face_min_px: int = 40  # visage plus petit (trop loin) ignoré
     face_interval_s: float = 0.3  # au plus une analyse toutes les 0,3 s
     face_cooldown_s: float = 30.0  # une même personne signalée au plus toutes les 30 s
+    api_token: str = ""  # jeton de l'API de l'UNO Q (servo, écran), envoyé en « Authorization: Bearer »
     display_api_url: str = ""  # écran OLED de l'UNO Q, ex. http://talos.local:8000 ; vide = pas d'écran
     display_seconds: int = 5
 
-    @field_validator("mqtt_ca", "mqtt_cert", "mqtt_key", "snapshot_dir", "face_models_dir", "faces_dir")
+    @field_validator("mqtt_ca", "mqtt_cert", "mqtt_key", "snapshot_dir", "face_models_dir", "faces_dir",
+                     "person_model")
     @classmethod
     def relative_to_vision(cls, p: Path | None) -> Path | None:
         """Chemin relatif = relatif au dossier vision/, pas au dossier de lancement."""

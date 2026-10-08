@@ -8,7 +8,6 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select, text
 
 from ..config import config
-from ..ingest import SNAPSHOT_RE
 from ..convert import to_alert, to_audit, to_log
 from ..db import AlertRow, AuditRow, LogRow
 from ..deps import Admin, Db, Lecteur, Operateur, client_ip
@@ -18,7 +17,7 @@ from ..live import live
 from ..schemas import (
     AckIn, Alert, AuditEntry, HistoryRange, HistorySensor, LogEntry, LogLevel, LogSource, Point, SystemState, dump,
 )
-from ..util import utcnow
+from ..util import SNAPSHOT_RE, utcnow
 
 router = APIRouter(prefix="/api", tags=["supervision"])
 

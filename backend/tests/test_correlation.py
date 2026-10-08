@@ -25,7 +25,7 @@ def test_nothing_is_info() -> None:
 def test_camera_motion_alone_during_office_hours_is_alerte() -> None:
     t = compute_threat({"vision"}, S, armed=False, occupied=True, recent_valid_badge=False)
     assert (t.score, t.level) == (40, "alerte")
-    assert t.reasons == ["Mouvement détecté par la caméra (+40)"]
+    assert t.reasons == ["Détection de la caméra (+40)"]
 
 
 def test_armed_multiplier() -> None:
@@ -100,3 +100,10 @@ def test_pir_count_last_hour() -> None:
     times = deque([now - timedelta(minutes=m) for m in (70, 50, 5)])
     assert count_recent(times, now, timedelta(hours=1)) == 2
     assert len(times) == 2  # l'ancien est retiré
+
+
+def test_masked_camera_is_sabotage() -> None:
+    t = compute_threat({"masque"}, S, armed=True, occupied=True, recent_valid_badge=False)
+    assert t.score == 75 and t.level == "critique"
+    assert t.reasons[0] == "Caméra masquée (+50)"
+    assert title_for({"masque"})[0] == "Sabotage du boîtier"

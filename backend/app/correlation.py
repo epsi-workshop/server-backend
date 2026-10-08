@@ -19,10 +19,11 @@ from .hub import hub
 from .journal import write_log
 from .live import live
 from .mqtt import CommandError, send_command
+from .notify import notify
 from .schemas import Settings, SystemState, Threat, ThreatLevel, dump
 from .util import utcnow
 
-Signal = Literal["pir", "proximite", "anomalie", "vision", "choc", "muet", "capot", "badge_refuse"]
+Signal = Literal["pir", "proximite", "anomalie", "vision", "choc", "muet", "capot", "badge_refuse", "masque"]
 
 WINDOW = timedelta(seconds=60)  # chaque type de signal compte une fois sur cette fenêtre
 ESCALATE = timedelta(seconds=90)  # une alerte ouverte plus récente est mise à jour au lieu d'être dupliquée
@@ -33,17 +34,18 @@ LABELS: dict[Signal, str] = {
     "pir": "Mouvement PIR",
     "proximite": "Objet à moins de 50 cm",
     "anomalie": "Anomalie environnementale",
-    "vision": "Mouvement détecté par la caméra",
+    "vision": "Détection de la caméra",  # personne confirmée, visage inconnu (ou mouvement sans YOLOX)
     "choc": "Choc ou déplacement du boîtier",
     "muet": "Boîtier muet",
     "capot": "Capot ouvert",
+    "masque": "Caméra masquée",
     "badge_refuse": "Badge refusé",
 }
 
 # Titre de l'alerte selon le signal le plus prioritaire présent.
 TITLES: list[tuple[set[Signal], str, int]] = [
     ({"vision"}, "Intrusion détectée", 6),
-    ({"capot", "choc"}, "Sabotage du boîtier", 5),
+    ({"capot", "choc", "masque"}, "Sabotage du boîtier", 5),
     ({"pir", "proximite"}, "Présence détectée", 4),
     ({"muet"}, "Boîtier muet", 3),
     ({"badge_refuse"}, "Badge refusé", 2),
@@ -150,6 +152,8 @@ class Correlator:
             kinds.add("muet")
         if state.anomaly.is_anomaly:
             kinds.add("anomalie")
+        if state.camera.masked:
+            kinds.add("masque")
         return kinds
 
     async def evaluate(self) -> None:
@@ -202,6 +206,8 @@ class Correlator:
         elif plan.raise_level or plan.better_title:
             await write_log("critical" if threat.level == "critique" else "warn", "backend",
                             f"Alerte escaladée : {alert.title} (score {alert.score})")
+        if plan.create or plan.raise_level:
+            notify(alert, escalated=not plan.create)  # push Alerte et Critique (EF-09), capture jointe
         if (plan.create or plan.raise_level) and threat.level == "critique" and live.state.device.armed:
             try:
                 if await send_command("buzzer_on"):

@@ -49,14 +49,16 @@ Tests : `pytest`.
 | API capteurs de l'UNO Q | `SENSOR_API_URL` (vide = désactivée) : `GET /health` toutes les 15 s (heartbeat), `GET /sensors` toutes les 5 s (température, humidité, PIR), WebSocket `/ws/pir` pour le PIR en temps réel. Réponses traduites en messages du contrat et traitées comme les messages MQTT (`sensor_api.py`) |
 | Corrélation | Portage de `computeThreat` / `maybeAlert` (`correlation.py`, testé) : fenêtre 60 s, multiplicateurs, niveaux, escalade sous 90 s, titres par priorité, `buzzer_on` si critique et armé |
 | Captures | `GET /api/snapshots/{nom}` (lecteur) : uniquement les captures rattachées à une alerte |
+| Rétention des captures | `snapshots.py` : une capture sans alerte est supprimée après 15 min, une capture d'alerte après `retentionDays` (ENF-09) |
+| Notifications ntfy (#16) | `notify.py` : alertes Alerte et Critique (création, escalade), capture en pièce jointe, jeton en écriture seule (`scripts/setup-ntfy.sh`) |
+| Anomalies | `sentinel/ai/anomaly` (service `anomaly/`) : état du dashboard, signal « anomalie » ; levée si plus de résultat depuis 60 s |
+| Personnes, caméra masquée | `sentinel/vision/detection` : `person` (YOLOX) compte dans le score, `motion` seulement sans détection de personnes ; `masked` = signal « Caméra masquée » (50 points) |
+| Redémarrages, état des services | `supervisor.py` : superviseur à liste blanche (`supervisor/`), jamais de `docker.sock` dans le backend |
 
 ## Ce qui reste (issues)
 
 | Issue | Où |
 | --- | --- |
-| #16 Notifications ntfy | `app/correlation.py` |
-| Rétention des captures (`snapshots/`) | à définir avec `retentionDays` |
-| Superviseur de redémarrage (liste blanche, jamais `docker.sock`) | `routers/control.py` (`restart`) |
 | Migrations Alembic dès que le schéma évolue | `db.py` (`init_db` ne fait que créer les tables manquantes) |
 
 Les commandes vers le boîtier (`arm`, `disarm`, `buzzer_on/off`, `reboot`) sont publiées sur `sentinel/box01/cmd` quand `MQTT_ENABLED=true`. Tant que c'est `false`, l'état est mis à jour et un avertissement est journalisé.

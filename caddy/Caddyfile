@@ -1,0 +1,52 @@
+# Caddy (cahier des charges, section 6) : seul point d'entrée HTTPS des opérateurs.
+# Certificat de la PKI du projet (pki/web), aucun certificat public ni accès Internet.
+{
+	admin off
+	auto_https off
+	# Connexion par adresse IP (sans SNI) : certificat présenté par défaut.
+	default_sni sentinel.lan
+	servers {
+		protocols h1 h2
+	}
+}
+
+(securite) {
+	tls /certs/web.crt /certs/web.key {
+		protocols tls1.2 tls1.3
+	}
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		-Server
+	}
+	log {
+		output stdout
+		format json
+	}
+}
+
+# Notifications push (téléphones des opérateurs) : nom ntfy.sentinel.lan à déclarer dans le DNS du routeur.
+https://ntfy.sentinel.lan:443 {
+	import securite
+	reverse_proxy ntfy:80
+}
+
+# Dashboard, API et WebSocket : https://192.168.50.10, https://sentinel.lan
+https://:443 {
+	import securite
+
+	# Flux MJPEG de la caméra : transmis sans mise en tampon.
+	handle /api/stream {
+		reverse_proxy backend:8000 {
+			flush_interval -1
+		}
+	}
+	handle /api/* {
+		reverse_proxy backend:8000
+	}
+	handle /ws/* {
+		reverse_proxy backend:8000
+	}
+	handle {
+		reverse_proxy frontend:80
+	}
+}

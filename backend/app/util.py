@@ -4,6 +4,8 @@ from datetime import UTC, datetime
 ROLE_RANK = {"lecteur": 0, "operateur": 1, "admin": 2}
 
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+# Nom d'une capture du service vision (snapshots/) : ni chemin, ni autre extension.
+SNAPSHOT_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}\.jpg$")
 
 
 def utcnow() -> datetime:

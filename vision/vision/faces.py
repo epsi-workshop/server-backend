@@ -149,10 +149,11 @@ def draw_faces(frame: np.ndarray, faces: list[Face]) -> None:
 class DisplayClient:
     """Affiche le résultat sur l'écran OLED de l'UNO Q (POST /display/face), dans un thread."""
 
-    def __init__(self, base_url: str, seconds: int) -> None:
+    def __init__(self, base_url: str, seconds: int, token: str = "") -> None:
         self.base_url = base_url.rstrip("/")
         self.seconds = seconds
-        self.client = httpx.Client(timeout=TIMEOUT, transport=httpx.HTTPTransport(local_address=IPV4_ONLY))
+        self.client = httpx.Client(timeout=TIMEOUT, transport=httpx.HTTPTransport(local_address=IPV4_ONLY),
+                                  headers={"Authorization": f"Bearer {token}"} if token else {})
         self._cond = threading.Condition()
         self._pending: dict | None = None
         self._ok: bool | None = None

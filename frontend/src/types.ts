@@ -134,7 +134,7 @@ export interface Badge {
 
 export interface Settings {
   weights: Record<
-    "pir" | "proximite" | "anomalie" | "vision" | "choc" | "muet" | "capot" | "badgeRefuse",
+    "pir" | "proximite" | "anomalie" | "vision" | "choc" | "muet" | "capot" | "badgeRefuse" | "masque",
     number
   >;
   thresholds: { alerte: number; critique: number };

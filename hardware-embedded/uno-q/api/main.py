@@ -13,12 +13,12 @@ import pathlib
 
 from fastapi import FastAPI, HTTPException, Path, Query, WebSocket
 from pydantic import BaseModel, Field
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from bridge import BridgeError, call, read_float, read_int
 from camera import camera_hub
 from realtime import pir_broadcaster
+from security import install
 
 
 @asynccontextmanager
@@ -30,8 +30,8 @@ async def lifespan(app):
 
 
 app = FastAPI(title="UNO Q Sensor API", version="0.2.0", lifespan=lifespan)
-# Autorise les dashboards servis depuis une autre origine (autre PC du réseau)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
+# Jeton obligatoire, routes /simulate fermées, origines web limitées (security.py, variables dans ~/sensor-api/.env).
+install(app)
 START = time.time()
 
 

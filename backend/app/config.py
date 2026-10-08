@@ -36,6 +36,10 @@ class Config(BaseSettings):
     # API capteurs de l'UNO Q (sensor_api.py), ex. http://talos.local:8000 (sans route : sensor_api.py les ajoute). Vide = désactivée.
     # Ne pas l'utiliser en même temps que la passerelle MQTT du même boîtier (deux sources pour un PIR).
     sensor_api_url: str = ""
+    # Jeton de l'API de l'UNO Q (variable API_TOKEN de la carte), envoyé en « Authorization: Bearer ». Vide = aucun.
+    sensor_api_token: str = ""
+    # Badges et porte « simulés » par l'API de la carte (routes /simulate, sans authentification) : ignorés sauf essai.
+    sensor_api_allow_simulation: bool = False
 
     # Flux MJPEG annoté rediffusé par le service vision (seul lecteur de l'ESP32-CAM).
     camera_url: str = "http://vision:8081/stream"
@@ -43,6 +47,17 @@ class Config(BaseSettings):
     camera_password: str = ""
     # Captures enregistrées par le service vision (volume partagé "snapshots").
     snapshot_dir: Path = Path("/snapshots")
+
+    # Notifications push (notify.py) : serveur ntfy, topic des alertes et jeton en écriture seule
+    # (scripts/setup-ntfy.sh). NTFY_URL vide = désactivées. Lien du dashboard ouvert depuis la notification.
+    ntfy_url: str = ""
+    ntfy_topic: str = "sentinel-alertes"
+    ntfy_token: str = ""
+    dashboard_url: str = "https://sentinel.lan"
+
+    # Superviseur (supervisor.py) : redémarrages à liste blanche et état des conteneurs. Vide = indisponible.
+    supervisor_url: str = ""
+    supervisor_token: str = ""
 
     # Reconnaissance faciale (faces.py) : modèles OpenCV Zoo et galerie lue par le service vision (volume partagé).
     face_models_dir: Path = Path("/models")

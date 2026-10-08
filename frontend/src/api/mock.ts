@@ -34,7 +34,7 @@ const badges: Badge[] = [
 ];
 
 let settings: Settings = {
-  weights: { pir: 20, proximite: 20, anomalie: 30, vision: 40, choc: 40, muet: 50, capot: 60, badgeRefuse: 30 },
+  weights: { pir: 20, proximite: 20, anomalie: 30, vision: 40, choc: 40, muet: 50, capot: 60, badgeRefuse: 30, masque: 50 },
   thresholds: { alerte: 30, critique: 70 },
   armedMultiplier: 1.5,
   occupancy: { start: "08:00", end: "19:00", days: [1, 2, 3, 4, 5] },
@@ -169,7 +169,7 @@ type Signal = keyof Settings["weights"];
 const SIGNAL_LABEL: Record<Signal, string> = {
   pir: "Mouvement PIR", proximite: "Objet à moins de 50 cm", anomalie: "Anomalie environnementale",
   vision: "Personne confirmée par la caméra", choc: "Choc ou déplacement du boîtier", muet: "Boîtier muet",
-  capot: "Capot ouvert", badgeRefuse: "Badge refusé",
+  capot: "Capot ouvert", badgeRefuse: "Badge refusé", masque: "Caméra masquée",
 };
 let signals: { kind: Signal; ts: number }[] = [];
 const addSignal = (kind: Signal) => signals.push({ kind, ts: Date.now() });
@@ -196,6 +196,7 @@ function computeThreat() {
   if (state.sensors.lid.open) kinds.add("capot");
   if (!state.device.online) kinds.add("muet");
   if (state.anomaly.isAnomaly) kinds.add("anomalie");
+  if (state.camera.masked) kinds.add("masque");
   let base = 0;
   const reasons: string[] = [];
   kinds.forEach((k) => {
@@ -220,7 +221,7 @@ function computeThreat() {
 const LEVEL_RANK: Record<ThreatLevel, number> = { info: 0, alerte: 1, critique: 2 };
 const TITLES: [Signal[], string, number][] = [
   [["vision"], "Intrusion détectée", 6],
-  [["capot", "choc"], "Sabotage du boîtier", 5],
+  [["capot", "choc", "masque"], "Sabotage du boîtier", 5],
   [["pir", "proximite"], "Présence détectée", 4],
   [["muet"], "Boîtier muet", 3],
   [["badgeRefuse"], "Badge refusé", 2],

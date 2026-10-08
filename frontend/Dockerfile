@@ -1,5 +1,5 @@
 # Service "frontend" du docker-compose : build Vite puis nginx statique, derrière Caddy.
-FROM node:24-alpine AS build
+FROM node:24.21.0-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -8,7 +8,9 @@ COPY . .
 ENV VITE_API_MODE=live
 RUN npm run build
 
-FROM nginx:stable-alpine
+FROM nginx:1.30.5-alpine
+# Correctifs Alpine publiés après l'image (scan Trivy).
+RUN apk upgrade --no-cache
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY security-headers.conf /etc/nginx/snippets/security-headers.conf
 COPY --from=build /app/dist /usr/share/nginx/html

@@ -95,9 +95,10 @@ class Tracker:
 class ServoClient:
     """Envoie les commandes au servo dans un thread ; seule la plus récente compte."""
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, token: str = "") -> None:
         self.base_url = base_url.rstrip("/")
-        self.client = httpx.Client(timeout=TIMEOUT, transport=httpx.HTTPTransport(local_address=IPV4_ONLY))
+        self.client = httpx.Client(timeout=TIMEOUT, transport=httpx.HTTPTransport(local_address=IPV4_ONLY),
+                                  headers={"Authorization": f"Bearer {token}"} if token else {})
         self._cond = threading.Condition()
         self._pending: tuple[int, int] | None = None
         self._ok: bool | None = None

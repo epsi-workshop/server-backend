@@ -25,6 +25,7 @@ from .config import config
 from .ingest import Envelope, box_event, box_heartbeat, box_telemetry
 from .journal import write_log
 from .live import live
+from .mqtt import CommandError, bus
 from .util import utcnow
 
 POLL_S = 5
@@ -50,6 +51,11 @@ ROUTE_OPENAPI = "/openapi.json"  # lue une fois, pour la version affichée dans 
 log = logging.getLogger(__name__)
 
 
+def is_simulated(source: Any) -> bool:
+    """Valeur produite par une route /simulate de la carte (et non par le lecteur ou le capteur)."""
+    return isinstance(source, str) and source.strip().lower() == "simulation"
+
+
 def _number(x: Any) -> float | None:
     """Valeur numérique, ou None (capteur absent : l'API renvoie null)."""
     return float(x) if isinstance(x, int | float) and not isinstance(x, bool) else None
@@ -65,6 +71,9 @@ class SensorApi:
         self.ws_ok: bool | None = None
         self.uptime_s = 0  # dernière valeur de /health, affichée dans l'administration
         self.version = "?"
+        # Jeton de la carte (SENSOR_API_TOKEN) : sans lui, n'importe quel poste du réseau peut piloter la carte.
+        self.headers = {"Authorization": f"Bearer {config.sensor_api_token}"} if config.sensor_api_token else {}
+        self.lid_simulated = False  # état « simulé » de la porte déjà signalé au journal
 
     def _envelope(self, kind: str, data: dict[str, Any]) -> Envelope:
         return Envelope(device=config.device_id, seq=time.time_ns() // 1_000_000, ts=utcnow(), type=kind, data=data)
@@ -74,16 +83,39 @@ class SensorApi:
         if motion == self.motion:
             return
         self.motion = motion
-        await box_event(self._envelope("pir", {"state": int(motion)}), SOURCE)
+        env = self._envelope("pir", {"state": int(motion)})
+        await box_event(env, SOURCE)
+        await self._relay("event", env)
 
-    async def _set_lid(self, is_open: bool) -> None:
-        """Porte du pot (capteur infrarouge HW-201) : seuls les changements sont transmis."""
+    async def _relay(self, kind: str, env: Envelope) -> None:
+        """Mesures et PIR lus sur l'API de la carte, republiés sur sentinel/<boîtier>/relay/<kind> pour le
+        service anomaly, qui n'écoute que MQTT (ACL : le backend seul y écrit, anomaly seul y lit)."""
+        if not config.mqtt_enabled:
+            return
+        try:
+            await bus.publish(f"sentinel/{config.device_id}/relay/{kind}", env.model_dump(mode="json"), qos=0)
+        except CommandError:
+            pass  # broker momentanément injoignable : la mesure suivante arrivera dans 5 s
+
+    async def _set_lid(self, is_open: bool, source: Any = None) -> None:
+        """Porte du pot (capteur infrarouge HW-201) : seuls les changements sont transmis.
+        Une valeur imposée par la route /sensors/lid/simulate (source « simulation ») est ignorée : sinon,
+        n'importe qui sur le réseau pourrait faire croire la porte fermée pendant qu'il l'ouvre."""
+        if is_simulated(source):
+            if not self.lid_simulated:
+                self.lid_simulated = True
+                await write_log("critical", "boitier", "État de la porte imposé par simulation sur l'API de la carte : ignoré"
+                                if not config.sensor_api_allow_simulation else "Porte en mode simulation (essai autorisé)")
+            if not config.sensor_api_allow_simulation:
+                return
+        else:
+            self.lid_simulated = False
         if is_open == self.lid_open:
             return
         self.lid_open = is_open
         await box_event(self._envelope("lid_open", {"state": int(is_open)}), SOURCE)
 
-    async def _set_rfid(self, seq: int, uid: str) -> None:
+    async def _set_rfid(self, seq: int, uid: str, source: Any = None) -> None:
         """Nouveau passage de badge (seq a changé) : l'UID est transmis, le backend décide (table badges).
         Le premier relevé sert de référence : un badge lu avant le démarrage du backend n'est pas rejoué."""
         if self.rfid_seq is None or seq < self.rfid_seq:  # démarrage, ou compteur remis à zéro (UNO Q redémarrée)
@@ -92,6 +124,10 @@ class SensorApi:
         if seq == self.rfid_seq:
             return
         self.rfid_seq = seq
+        if is_simulated(source) and not config.sensor_api_allow_simulation:
+            # Route /sensors/rfid/simulate de la carte, sans authentification : un badge connu y désarmerait le système.
+            await write_log("critical", "boitier", f"Badge simulé sur l'API de la carte ignoré : {uid[:32]}")
+            return
         hex_uid = "".join(c for c in uid.upper() if c in "0123456789ABCDEF")
         if len(hex_uid) % 2 or not 8 <= len(hex_uid) <= 14:
             await write_log("warn", "boitier", f"Badge illisible : {uid[:32]}")
@@ -101,7 +137,7 @@ class SensorApi:
     async def push_armed(self, armed: bool) -> None:
         """Armement (dashboard ou badge) poussé à l'UNO Q : écran et sortie « verrou »."""
         try:
-            async with httpx.AsyncClient(base_url=self.base_url, timeout=TIMEOUT,
+            async with httpx.AsyncClient(base_url=self.base_url, headers=self.headers, timeout=TIMEOUT,
                                          transport=httpx.AsyncHTTPTransport(local_address=IPV4_ONLY)) as client:
                 (await client.post(f"{ROUTE_ARMED}/{'on' if armed else 'off'}")).raise_for_status()
         except httpx.HTTPError as e:
@@ -109,7 +145,7 @@ class SensorApi:
 
     async def push_badge(self, result: str, uid: str, name: str | None) -> None:
         """Résultat d'un passage de badge sur l'écran OLED : accepté, refusé ou lu pour enregistrement."""
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=TIMEOUT,
+        async with httpx.AsyncClient(base_url=self.base_url, headers=self.headers, timeout=TIMEOUT,
                                      transport=httpx.AsyncHTTPTransport(local_address=IPV4_ONLY)) as client:
             (await client.post(ROUTE_DISPLAY_BADGE, json={
                 "result": result, "uid": uid, "name": (name or "")[:16], "armed": live.state.device.armed,
@@ -118,14 +154,14 @@ class SensorApi:
     async def poll_rfid(self) -> None:
         """Badge seul, toutes les RFID_POLL_S : /sensors (toutes les 5 s) ferait attendre l'utilisateur."""
         transport = httpx.AsyncHTTPTransport(local_address=IPV4_ONLY)
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=TIMEOUT, transport=transport) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, headers=self.headers, timeout=TIMEOUT, transport=transport) as client:
             while True:
                 try:
                     r = await client.get(ROUTE_RFID)
                     r.raise_for_status()
                     rfid = r.json()
                     if isinstance(rfid, dict) and isinstance(rfid.get("seq"), int) and not isinstance(rfid["seq"], bool):
-                        await self._set_rfid(rfid["seq"], rfid.get("uid") or "")
+                        await self._set_rfid(rfid["seq"], rfid.get("uid") or "", rfid.get("source"))
                 except (httpx.HTTPError, ValueError):
                     await asyncio.sleep(RETRY_S)  # panne signalée par poll(), pas de journal ici
                 except Exception:  # noqa: BLE001
@@ -136,19 +172,21 @@ class SensorApi:
         telemetry = {k: v for k, v in (("temperature", _number(s.get("temperature_c"))),
                                        ("humidity", _number(s.get("humidity_pct")))) if v is not None}
         if telemetry:
-            await box_telemetry(self._envelope("telemetry", telemetry), SOURCE)
+            env = self._envelope("telemetry", telemetry)
+            await box_telemetry(env, SOURCE)
+            await self._relay("telemetry", env)
         pir = s.get("pir")
         if isinstance(pir, dict) and isinstance(pir.get("motion"), bool):
             await self._set_motion(pir["motion"])
         rfid = s.get("rfid")
         if isinstance(rfid, dict) and isinstance(rfid.get("seq"), int) and not isinstance(rfid.get("seq"), bool):
-            await self._set_rfid(rfid["seq"], rfid.get("uid") or "")
+            await self._set_rfid(rfid["seq"], rfid.get("uid") or "", rfid.get("source"))
         # Armement : l'UNO Q redémarre « désarmée » ; on lui renvoie l'état du dashboard s'il diffère.
         if isinstance(s.get("armed"), bool) and s["armed"] != live.state.device.armed:
             await self.push_armed(live.state.device.armed)
         lid = s.get("lid")
         if isinstance(lid, dict) and isinstance(lid.get("open"), bool):
-            await self._set_lid(lid["open"])
+            await self._set_lid(lid["open"], lid.get("source"))
 
     async def _http_state(self, ok: bool, error: str = "") -> None:
         """Journalise seulement les changements (pas un message toutes les 5 s pendant une panne)."""
@@ -163,7 +201,7 @@ class SensorApi:
         """Heartbeat et télémesure. Sans réponse de /health, le boîtier passe « muet » au bout de 45 s."""
         # Un seul client, gardé ouvert : le nom talos.local n'est résolu qu'à la connexion, pas à chaque requête.
         transport = httpx.AsyncHTTPTransport(local_address=IPV4_ONLY)
-        async with httpx.AsyncClient(base_url=self.base_url, timeout=TIMEOUT, transport=transport) as client:
+        async with httpx.AsyncClient(base_url=self.base_url, headers=self.headers, timeout=TIMEOUT, transport=transport) as client:
             n = 0
             while True:
                 try:
@@ -192,7 +230,7 @@ class SensorApi:
         url = self.base_url.replace("http", "ws", 1) + ROUTE_WS_PIR  # http -> ws, https -> wss
         while True:
             try:
-                async with connect(url, open_timeout=20, family=socket.AF_INET) as ws:
+                async with connect(url, open_timeout=20, family=socket.AF_INET, additional_headers=self.headers) as ws:
                     if not self.ws_ok:
                         self.ws_ok = True
                         log.info("WebSocket PIR connecté (%s)", url)

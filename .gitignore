@@ -15,6 +15,12 @@ models/
 
 # Secrets : configuration locale, PKI (clés privées et certificats)
 .env
+# Identifiants Wi-Fi et caméra des firmwares (modèle : secrets.example.h), où qu'ils soient
+secrets.h
+.admin-password
+.ntfy-*-password
+# Sauvegardes de la base (./sentinel sauvegarde)
+backups/
 gateway.env
 pki/
 certs/
@@ -36,3 +42,6 @@ node_modules/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Copie protégée de mosquitto/acl installée par scripts/fix-owners.sh (lisible par mosquitto seul)
+mosquitto/config/acl

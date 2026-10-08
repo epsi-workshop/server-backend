@@ -1,0 +1,239 @@
+# Sentinel-X : déploiement complet du PC serveur (cahier des charges, section 6). Voir DEPLOIEMENT.md.
+#   scripts/download-face-models.sh                    # modèles de reconnaissance faciale (models/)
+#   scripts/gen-pki.sh && scripts/fix-owners.sh        # PKI, une seule fois
+#   cp .env.example .env && chmod 600 .env             # puis renseigner POSTGRES_PASSWORD
+#   docker compose up -d --build
+#   scripts/setup-ntfy.sh                              # comptes ntfy, jeton du backend (notifications)
+#
+# Ports publiés : 443 (Caddy, HTTPS) et 8883 (Mosquitto, MQTTS). Rien d'autre n'est joignable de l'extérieur.
+# Chaque service ne reçoit que ses propres variables (pas d'env_file commun : le mot de passe de la base
+# ne va qu'à db et backend).
+
+name: sentinel-x  # nom du projet (préfixe des conteneurs et volumes, utilisé par le superviseur)
+
+x-logging: &logging
+  driver: json-file
+  options: { max-size: "10m", max-file: "3" }
+
+x-hardened: &hardened
+  restart: unless-stopped
+  logging: *logging
+  security_opt: ["no-new-privileges:true"]
+
+# Services maison : utilisateur non-root (Dockerfile), système de fichiers en lecture seule, aucune capacité.
+x-app: &app
+  <<: *hardened
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+
+x-mqtt: &mqtt
+  MQTT_HOST: mosquitto
+  MQTT_PORT: "8883"
+  MQTT_TLS: "true"
+  MQTT_CA: /certs/ca.crt
+
+services:
+  caddy:
+    <<: *hardened
+    image: caddy:2.11.7-alpine
+    ports: ["${BIND_ADDR:-0.0.0.0}:443:443"]
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./pki/web:/certs:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [edge]
+    depends_on: [frontend, backend, ntfy]
+
+  mosquitto:
+    <<: *hardened
+    image: eclipse-mosquitto:2.0.22
+    ports: ["${BIND_ADDR:-0.0.0.0}:8883:8883"]
+    volumes:
+      - ./mosquitto/config:/mosquitto/config:ro
+      - ./pki/broker:/mosquitto/certs:ro
+      - mosquitto_data:/mosquitto/data
+    networks: [mqtt]
+
+  db:
+    <<: *hardened
+    image: timescale/timescaledb:2.30.2-pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sentinel}
+      POSTGRES_DB: ${POSTGRES_DB:-sentinel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+      TS_TUNE_MEMORY: 1GB
+    volumes: [db_data:/var/lib/postgresql/data]
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      retries: 20
+
+  # Une fois au démarrage : propriétaires des volumes partagés. Les captures appartiennent à vision (uid 10002),
+  # qui les écrit, et au groupe 10010 (setgid) dont le backend fait partie pour appliquer la rétention (suppression) ;
+  # la galerie des visages appartient au backend (uid 10001), qui l'écrit, vision la lit.
+  volumes-init:
+    image: alpine:3.24.2
+    command: ["sh", "-c", "chown 10002:10010 /snapshots && chmod 2775 /snapshots && chown 10001:10001 /faces && chmod 755 /faces"]
+    volumes: [snapshots:/snapshots, faces:/faces]
+    network_mode: none
+    restart: "no"
+
+  backend:
+    <<: *app
+    build: ./backend
+    image: sentinel-x/backend:0.2.0
+    environment:
+      <<: *mqtt
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-sentinel}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-sentinel}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://192.168.50.10,https://sentinel.lan}
+      COOKIE_SECURE: "true"
+      EXPOSE_DOCS: "false"
+      TIMEZONE: ${TIMEZONE:-Europe/Paris}
+      DEVICE_ID: box01
+      MQTT_ENABLED: "true"
+      MQTT_CERT: /certs/backend.crt
+      MQTT_KEY: /certs/backend.key
+      CAMERA_URL: http://vision:8081/stream
+      SNAPSHOT_DIR: /snapshots
+      SENSOR_API_URL: ${SENSOR_API_URL:-}
+      SENSOR_API_TOKEN: ${UNOQ_API_TOKEN:-}
+      SENSOR_API_ALLOW_SIMULATION: ${SENSOR_API_ALLOW_SIMULATION:-false}
+      FACE_MODELS_DIR: /models
+      FACES_DIR: /faces
+      NTFY_URL: http://ntfy:80
+      NTFY_TOPIC: ${NTFY_TOPIC:-sentinel-alertes}
+      NTFY_TOKEN: ${NTFY_TOKEN:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-https://sentinel.lan}
+      SUPERVISOR_URL: http://supervisor:8090
+      SUPERVISOR_TOKEN: ${SUPERVISOR_TOKEN:-}
+    group_add: ["10010"]  # groupe des captures : rétention (snapshots.py)
+    volumes:
+      - ./pki/backend:/certs:ro
+      - ./models:/models:ro
+      - snapshots:/snapshots
+      - faces:/faces
+    networks: [edge, data, mqtt, supervision]
+    depends_on:
+      db: { condition: service_healthy }
+      mosquitto: { condition: service_started }
+      volumes-init: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  vision:
+    <<: *app
+    build: ./vision
+    image: sentinel-x/vision:0.2.0
+    environment:
+      <<: *mqtt
+      CAMERA_URL: ${CAMERA_URL:-http://192.168.50.21:81/stream}
+      CAMERA_USER: ${CAMERA_USER:-}
+      CAMERA_PASSWORD: ${CAMERA_PASSWORD:-}
+      STREAM_HOST: 0.0.0.0
+      STREAM_PORT: "8081"
+      SNAPSHOT_DIR: /snapshots
+      MQTT_CERT: /certs/vision.crt
+      MQTT_KEY: /certs/vision.key
+      SERVO_API_URL: ${SERVO_API_URL:-}
+      FACE_MODELS_DIR: /models
+      FACES_DIR: /faces
+      DISPLAY_API_URL: ${DISPLAY_API_URL:-}
+      API_TOKEN: ${UNOQ_API_TOKEN:-}
+      PERSON_MODEL: /models/object_detection_yolox_2022nov.onnx
+    volumes:
+      - ./pki/vision:/certs:ro
+      - ./models:/models:ro
+      - snapshots:/snapshots
+      - faces:/faces:ro
+    networks: [mqtt]
+    depends_on:
+      mosquitto: { condition: service_started }
+      volumes-init: { condition: service_completed_successfully }
+
+  anomaly:
+    <<: *app
+    build: ./anomaly
+    image: sentinel-x/anomaly:0.1.0
+    environment:
+      <<: *mqtt
+      MQTT_CERT: /certs/anomaly.crt
+      MQTT_KEY: /certs/anomaly.key
+      DEVICE_ID: box01
+      TIMEZONE: ${TIMEZONE:-Europe/Paris}
+      TEMP_LIMIT: ${TEMP_LIMIT:-27}
+      HUMIDITY_LIMIT: ${HUMIDITY_LIMIT:-80}
+    volumes:
+      - ./pki/anomaly:/certs:ro
+      - anomaly_data:/data
+    networks: [mqtt]
+    depends_on: [mosquitto]
+
+  # Seul service avec le socket Docker (équivalent root sur l'hôte) : liste blanche de redémarrages, jeton,
+  # réseau interne joignable par le backend seul, utilisateur non-root du groupe docker de l'hôte.
+  supervisor:
+    <<: *app
+    build: ./supervisor
+    image: sentinel-x/supervisor:0.1.0
+    group_add: ["${DOCKER_GID:-984}"]
+    environment:
+      COMPOSE_PROJECT: sentinel-x
+      SUPERVISOR_TOKEN: ${SUPERVISOR_TOKEN:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks: [supervision]
+
+  frontend:
+    <<: *hardened
+    build: ./frontend
+    image: sentinel-x/frontend:0.2.0
+    networks: [edge]
+
+  ntfy:
+    <<: *hardened
+    image: binwiederhier/ntfy:v2.29.0
+    command: serve
+    environment:
+      NTFY_BASE_URL: https://ntfy.sentinel.lan
+      NTFY_BEHIND_PROXY: "true"
+      NTFY_CACHE_FILE: /var/cache/ntfy/cache.db
+      NTFY_AUTH_FILE: /var/lib/ntfy/user.db
+      NTFY_AUTH_DEFAULT_ACCESS: deny-all
+      NTFY_ENABLE_LOGIN: "true"
+      NTFY_ENABLE_SIGNUP: "false"
+      NTFY_UPSTREAM_BASE_URL: ""
+      # Captures jointes aux alertes, servies aux téléphones (expirent après 3 h).
+      NTFY_ATTACHMENT_CACHE_DIR: /var/cache/ntfy/attachments
+    volumes:
+      - ntfy_cache:/var/cache/ntfy
+      - ntfy_data:/var/lib/ntfy
+    networks: [edge]
+
+networks:
+  # Caddy et les services qu'il expose.
+  edge: {}
+  # Broker : backend, vision, anomaly (et le port 8883 publié pour le boîtier). Vision y joint aussi l'ESP32-CAM.
+  mqtt: {}
+  # Base de données : backend seulement, sans accès extérieur.
+  data: { internal: true }
+  # Superviseur : backend seulement, sans accès extérieur.
+  supervision: { internal: true }
+
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+  mosquitto_data: {}
+  db_data: {}
+  snapshots: {}
+  faces: {}
+  anomaly_data: {}
+  ntfy_cache: {}
+  ntfy_data: {}

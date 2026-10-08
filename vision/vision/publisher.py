@@ -35,21 +35,30 @@ class Publisher:
         self.client.connect_async(cfg.mqtt_host, cfg.mqtt_port, keepalive=30)
         self.client.loop_start()
         self._last_seq = 0
+        # Détection de personnes active : le backend ne compte plus un simple mouvement dans le score.
+        self.person_detection = False
 
     def detection(self, kind: Literal["motion", "person", "face_known", "face_unknown"], confidence: float,
                   snapshot: str | None, member_id: str | None = None) -> None:
+        data: dict[str, Any] = {"confidence": round(confidence, 2), "snapshot": snapshot}
+        if member_id:
+            data["member_id"] = member_id
+        if kind == "motion" and self.person_detection:
+            data["person_detection"] = True
+        self._send(kind, data)
+
+    def masked(self, masked: bool) -> None:
+        """Objectif masqué (image uniforme) ou de nouveau dégagé : signal « Caméra masquée » du backend."""
+        self._send("masked", {"state": int(masked)})
+
+    def _send(self, kind: str, data: dict[str, Any]) -> None:
         # seq en millisecondes : croissant même après un redémarrage du service (anti-rejeu du backend).
         seq = max(time.time_ns() // 1_000_000, self._last_seq + 1)
         self._last_seq = seq
-        payload: dict[str, Any] = {
-            "device": DEVICE, "seq": seq, "ts": iso(datetime.now(UTC)), "type": kind,
-            "data": {"confidence": round(confidence, 2), "snapshot": snapshot},
-        }
-        if member_id:
-            payload["data"]["member_id"] = member_id
+        payload = {"device": DEVICE, "seq": seq, "ts": iso(datetime.now(UTC)), "type": kind, "data": data}
         info = self.client.publish(TOPIC, json.dumps(payload), qos=1)
         if info.rc != mqtt.MQTT_ERR_SUCCESS:
-            log.warning("Détection non publiée (broker injoignable) : %s", mqtt.error_string(info.rc))
+            log.warning("Message %s non publié (broker injoignable) : %s", kind, mqtt.error_string(info.rc))
 
     def stop(self) -> None:
         self.client.disconnect()

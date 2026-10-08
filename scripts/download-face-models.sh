@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Modèles de reconnaissance faciale (OpenCV Zoo, licence Apache 2.0 / MIT) dans models/ :
-#   YuNet (détection, 0,2 Mo) et SFace (empreinte du visage, 37 Mo). Utilisés par le backend et le service vision.
+# Modèles OpenCV Zoo (licence Apache 2.0 / MIT) dans models/ :
+#   YuNet (détection de visage, 0,2 Mo) et SFace (empreinte du visage, 37 Mo) : backend et service vision ;
+#   YOLOX-S (détection de personnes, 36 Mo) : service vision. Sommes SHA-256 = oid Git LFS d'OpenCV Zoo.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 mkdir -p models
@@ -16,3 +17,5 @@ fetch face_detection_yunet_2023mar.onnx "$BASE/face_detection_yunet/face_detecti
   8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4
 fetch face_recognition_sface_2021dec.onnx "$BASE/face_recognition_sface/face_recognition_sface_2021dec.onnx" \
   0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79
+fetch object_detection_yolox_2022nov.onnx "$BASE/object_detection_yolox/object_detection_yolox_2022nov.onnx" \
+  c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063

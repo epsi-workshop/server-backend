@@ -1,11 +1,10 @@
 """Ingestion MQTT (#15) : validation, anti-rejeu, écriture en base, mise à jour de l'état.
 
-Topics : sentinel/vision/detection et sentinel/<boîtier>/{telemetry,event,heartbeat,status}.
+Topics : sentinel/vision/detection, sentinel/ai/anomaly et sentinel/<boîtier>/{telemetry,event,heartbeat,status}.
 """
 import asyncio
 import json
 import logging
-import re
 import uuid
 from collections import deque
 from datetime import datetime, timedelta
@@ -22,16 +21,17 @@ from .db import BadgeRow, SessionLocal, TeamMemberRow, events, measurements
 from .journal import write_log
 from .live import live
 from .mqtt import Handler
-from .schemas import Detection, Distance, FaceSighting, Reading
-from .util import clean, utcnow
+from .schemas import Anomaly, Detection, Distance, FaceSighting, Reading
+from .util import SNAPSHOT_RE, clean, utcnow
 
-SNAPSHOT_RE = re.compile(r"^[A-Za-z0-9_-]{1,80}\.jpg$")
 MAX_AGE = timedelta(minutes=5)
 MAX_FUTURE = timedelta(minutes=1)  # tolérance de décalage d'horloge (NTP)
 HEARTBEAT_TIMEOUT = timedelta(seconds=45)  # 3 heartbeats manqués (un toutes les 15 s)
 SHOCK_DISPLAY = timedelta(seconds=10)  # durée d'affichage de « choc » sur le dashboard
 PROXIMITY_CM = 50
 WATCHDOG_INTERVAL_S = 5
+MASKED_TIMEOUT = timedelta(seconds=30)  # vision republie « masked » toutes les 10 s tant que l'objectif est masqué
+ANOMALY_TIMEOUT = timedelta(seconds=60)  # le service anomaly publie à chaque télémesure (5 s)
 
 log = logging.getLogger(__name__)
 
@@ -49,6 +49,8 @@ class VisionData(BaseModel):
     confidence: Annotated[float, Field(ge=0, le=1)]
     snapshot: Annotated[str, Field(pattern=SNAPSHOT_RE.pattern)] | None = None
     member_id: uuid.UUID | None = None  # face_known : membre reconnu (le prénom vient de la base, pas du message)
+    # motion : vision détecte aussi les personnes (YOLOX) ; le mouvement seul ne compte alors pas dans le score.
+    person_detection: bool = False
 
 
 class TelemetryData(BaseModel):
@@ -61,6 +63,15 @@ class HeartbeatData(BaseModel):
     uptime: Annotated[int, Field(ge=0)] = 0
     rssi: Annotated[int, Field(ge=-120, le=0)] = 0
     firmware: Annotated[str, Field(max_length=32)] | None = None
+
+
+class AnomalyData(BaseModel):
+    score: Annotated[float, Field(ge=0, le=1)]
+    is_anomaly: bool
+    projected_temp15: Annotated[float, Field(ge=-40, le=125)] | None = None
+    features: Annotated[list[Annotated[str, Field(max_length=120)]], Field(max_length=8)] = []
+    model_trained_at: AwareDatetime | None = None
+    model_hours: Annotated[float, Field(ge=0)] | None = None
 
 
 class StateData(BaseModel):
@@ -140,12 +151,27 @@ async def _update() -> None:
 
 
 # ---------------------------------------------------------------- vision
+class VisionWatch:
+    """Dernière personne vue : un seul message au journal par passage, pas un toutes les 2 s."""
+
+    def __init__(self) -> None:
+        self.person_at: datetime | None = None
+        self.masked_at: datetime | None = None  # dernier message « objectif masqué »
+
+
+vision_watch = VisionWatch()
+PERSON_EPISODE = timedelta(seconds=60)
+
+
 async def on_vision_detection(topic: str, payload: bytes) -> None:
     env = await _parse(topic, payload)
     if env is None:
         return
     if env.type in ("face_known", "face_unknown"):
         await on_face(env)
+        return
+    if env.type == "masked":
+        await on_masked(env)
         return
     if env.type not in ("motion", "person"):
         await write_log("warn", "vision", f"Type de détection inconnu : {clean(env.type, 32)}")
@@ -166,12 +192,43 @@ async def on_vision_detection(topic: str, payload: bytes) -> None:
                                                 data=data.model_dump()))
         await db.commit()
 
-    correlator.signal("vision", env.ts, data.snapshot)
-    if new_episode:
-        what = "Personne détectée" if env.type == "person" else "Mouvement détecté devant la caméra"
-        await write_log("warn", "vision", f"{what}, flux déverrouillé"
-                        + (f", capture {data.snapshot}" if data.snapshot else ""))
+    # Barème du cahier (7.8) : « personne confirmée par la vision ». Un mouvement ne compte que si vision
+    # ne sait pas reconnaître une personne (modèle absent) ; sinon il déverrouille seulement le flux.
+    if not (env.type == "motion" and data.person_detection):
+        correlator.signal("vision", env.ts, data.snapshot)
+    capture = f", capture {data.snapshot}" if data.snapshot else ""
+    if env.type == "person":
+        if vision_watch.person_at is None or env.ts - vision_watch.person_at > PERSON_EPISODE:
+            await write_log("warn", "vision", f"Personne détectée (confiance {data.confidence:.0%}){capture}"
+                            .replace("%", " %"))
+        vision_watch.person_at = env.ts
+    elif new_episode:
+        await write_log("warn", "vision", f"Mouvement détecté devant la caméra, flux déverrouillé{capture}")
     await _update()
+
+
+async def on_masked(env: Envelope) -> None:
+    """Objectif masqué ou image uniforme (cahier 8.1) : signal « Caméra masquée » tant que ça dure."""
+    try:
+        masked = StateData.model_validate(env.data).state == 1
+    except ValidationError:
+        await _invalid("sentinel/vision/detection", "état de la caméra")
+        return
+    cam = live.state.camera
+    vision_watch.masked_at = utcnow() if masked else None
+    if masked == cam.masked:
+        return
+    cam.masked = masked
+    await _store_event(env, {"state": int(masked)})
+    if masked:
+        await write_log("critical", "vision", "Caméra masquée : image uniforme, plus de preuve visuelle")
+    else:
+        await write_log("info", "vision", "Caméra de nouveau dégagée")
+    await _update()
+
+
+def masked_stale(masked_at: datetime | None, now: datetime) -> bool:
+    return masked_at is not None and now - masked_at > MASKED_TIMEOUT
 
 
 async def on_face(env: Envelope) -> None:
@@ -205,6 +262,63 @@ async def on_face(env: Envelope) -> None:
         correlator.signal("vision", env.ts, data.snapshot)
         await write_log("critical", "vision", "Intrus détecté : visage inconnu"
                         + (f", capture {data.snapshot}" if data.snapshot else ""))
+    await _update()
+
+
+# ---------------------------------------------------------------- anomalies (service anomaly)
+class AnomalyWatch:
+    """Dernier résultat du service anomaly : sert à détecter son silence et ses réentraînements."""
+
+    def __init__(self) -> None:
+        self.last_seen: datetime | None = None
+        self.trained_at: datetime | None = None
+
+
+anomaly_watch = AnomalyWatch()
+
+
+def anomaly_stale(last_seen: datetime | None, now: datetime) -> bool:
+    """Plus de résultat depuis ANOMALY_TIMEOUT : l'état affiché n'est plus à jour (anomalie levée)."""
+    return last_seen is not None and now - last_seen > ANOMALY_TIMEOUT
+
+
+def anomaly_silent(last_seen: datetime, last_telemetry: datetime) -> bool:
+    """Le boîtier a continué d'envoyer des mesures sans réponse du service anomaly : il est en panne.
+    (Sans mesures, le service n'a rien à analyser : son silence est normal.)"""
+    return last_telemetry - last_seen > ANOMALY_TIMEOUT
+
+
+async def on_ai_anomaly(topic: str, payload: bytes) -> None:
+    env = await _parse(topic, payload, "anomaly")
+    if env is None:
+        return
+    if env.type != "anomaly":
+        await _invalid(topic, "type")
+        return
+    try:
+        data = AnomalyData.model_validate(env.data)
+    except ValidationError:
+        await _invalid(topic, "résultat d'anomalie")
+        return
+
+    was = live.state.anomaly.is_anomaly
+    features = [clean(f, 120) for f in data.features]
+    projected = data.projected_temp15 if data.projected_temp15 is not None else live.state.sensors.temperature.value
+    live.state.anomaly = Anomaly(score=data.score, is_anomaly=data.is_anomaly, projected_temp15=projected,
+                                 features=features)
+    anomaly_watch.last_seen = utcnow()
+
+    if data.model_trained_at and data.model_trained_at != anomaly_watch.trained_at:
+        anomaly_watch.trained_at = data.model_trained_at
+        await write_log("info", "anomaly", "Modèle Isolation Forest entraîné sur "
+                        f"{data.model_hours or 0:.1f} h de mesures".replace(".", ","))
+    if data.is_anomaly == was:
+        return  # état poussé au dashboard par live.run() toutes les 2 s
+    if data.is_anomaly:
+        await _store_event(env, data.model_dump(mode="json"))
+        await write_log("warn", "anomaly", "Anomalie environnementale : " + (", ".join(features) or "score élevé"))
+    else:
+        await write_log("info", "anomaly", "Mesures revenues à la normale")
     await _update()
 
 
@@ -364,7 +478,7 @@ async def on_box_status(topic: str, payload: bytes) -> None:
 
 
 async def watchdog() -> None:
-    """Boîtier muet (3 heartbeats manqués) et fin de l'affichage « choc »."""
+    """Boîtier muet (3 heartbeats manqués), fin de l'affichage « choc », service anomaly muet."""
     while True:
         await asyncio.sleep(WATCHDOG_INTERVAL_S)
         try:
@@ -378,6 +492,20 @@ async def watchdog() -> None:
             if imu.shock and imu.last_shock and now - imu.last_shock > SHOCK_DISPLAY:
                 imu.shock = False
                 changed = True
+            if live.state.camera.masked and masked_stale(vision_watch.masked_at, now):
+                # Vision ne confirme plus le masquage (service arrêté) : l'état ne doit pas rester figé.
+                live.state.camera.masked = False
+                vision_watch.masked_at = None
+                changed = True
+                await write_log("warn", "vision", "État « caméra masquée » levé : plus de nouvelles du service vision")
+            if anomaly_stale(anomaly_watch.last_seen, now):
+                # Résultat périmé : une anomalie ne doit pas rester levée indéfiniment.
+                last_seen, anomaly_watch.last_seen = anomaly_watch.last_seen, None
+                live.state.anomaly = Anomaly(score=0, is_anomaly=False,
+                                             projected_temp15=live.state.sensors.temperature.value, features=[])
+                changed = True
+                if anomaly_silent(last_seen, live.state.sensors.temperature.ts):  # type: ignore[arg-type]
+                    await write_log("warn", "anomaly", "Service anomaly muet : mesures reçues sans résultat depuis 60 s")
             if changed:
                 await _update()
         except Exception:  # noqa: BLE001 (la surveillance ne doit jamais s'arrêter)
@@ -387,6 +515,7 @@ async def watchdog() -> None:
 _box = f"sentinel/{config.device_id}"
 HANDLERS: dict[str, Handler] = {
     "sentinel/vision/detection": on_vision_detection,
+    "sentinel/ai/anomaly": on_ai_anomaly,
     f"{_box}/telemetry": on_box_telemetry,
     f"{_box}/event": on_box_event,
     f"{_box}/heartbeat": on_box_heartbeat,
