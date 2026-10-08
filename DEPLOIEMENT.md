@@ -43,7 +43,7 @@ Volumes partagés : `snapshots` (vision écrit ; le backend lit et applique la r
 - Pas de modèle avant 2 h de mesures (`min_train_hours`) ; réentraînement toutes les heures sur 30 jours d'historique.
 - Variables : température, humidité, variations sur 5 min, déclenchements PIR sur 1 h, puis heure (dès 24 h d'historique) et jour de la semaine (dès 7 jours) pour éviter les fausses alertes.
 - Anomalie confirmée sur 3 mesures parmi 5. Projection : régression linéaire sur 30 min, alerte si la température projetée à +15 min dépasse `TEMP_LIMIT` (27 °C).
-- Ne voit que la télémétrie MQTT : avec `SENSOR_API_URL` (capteurs relus en HTTP par le backend), il ne reçoit rien.
+- Avec `SENSOR_API_URL` (capteurs lus en HTTP par le backend sur la carte UNO Q), le backend lui relaie mesures et PIR sur `sentinel/box01/relay/telemetry` et `/relay/event` (ACL : le backend seul y écrit, anomaly seul y lit).
 
 ## Notifications push (ntfy)
 

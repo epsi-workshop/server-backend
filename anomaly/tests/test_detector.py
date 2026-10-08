@@ -124,3 +124,17 @@ def test_slow_drift_alerts_before_the_limit() -> None:
 def test_confirmer_needs_three_of_five() -> None:
     c = Confirmer(3, 5)
     assert [c.update(x) for x in (True, False, True, False, True)] == [False, False, False, False, True]
+
+
+def test_inbox_accepts_backend_relay_envelope() -> None:
+    """Enveloppe relayée par le backend (Envelope.model_dump, horodatage « +00:00 »)."""
+    import json
+    from datetime import UTC, datetime
+
+    from anomaly.__main__ import Inbox
+    now = datetime(2026, 10, 8, 4, 0, tzinfo=UTC)
+    payload = json.dumps({"device": "box01", "seq": 1, "ts": "2026-10-08T04:00:00.120000+00:00",
+                          "type": "telemetry", "data": {"temperature": 22.4}}).encode()
+    inbox = Inbox("box01")
+    assert inbox.parse("sentinel/box01/relay/telemetry", payload, now)["data"]["temperature"] == 22.4
+    assert inbox.parse("sentinel/box01/relay/telemetry", payload, now) is None  # rejeu

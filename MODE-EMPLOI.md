@@ -106,7 +106,7 @@ La commande trouve la carte sur le partage de connexion (en général `172.20.10
 
 **À faire une fois par l'équipe IoT : protéger la carte.** Aujourd'hui, n'importe quel appareil du partage de connexion peut simuler un badge et désarmer le système, ou regarder la caméra. Le serveur ignore déjà les badges « simulés », et il a un **jeton secret** prêt pour la carte (`./sentinel identifiants`, ligne « Jeton de la carte UNO Q »). Il suffit de l'installer sur la carte : marche à suivre dans `hardware-embedded/uno-q/README.md`, section « Sécurité ». Rien à refaire sur le serveur, il envoie déjà ce jeton.
 
-À savoir aussi : le service d'anomalies ne reçoit ses mesures que par MQTT. La cible du cahier reste le MQTTS ci-dessous.
+La détection d'anomalies reçoit aussi les mesures de la carte (relayées par le serveur) : elle démarre dès que la carte fournit une température. La cible du cahier reste le MQTTS ci-dessous.
 
 ### Avec la passerelle MQTTS (cible du cahier des charges)
 

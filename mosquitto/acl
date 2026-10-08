@@ -11,6 +11,8 @@ topic read sentinel/box01/cmd
 user backend
 topic read sentinel/#
 topic write sentinel/+/cmd
+# Mesures lues sur l'API HTTP de la carte, relayées au service anomaly
+topic write sentinel/+/relay/#
 
 user vision
 topic read sentinel/+/event
@@ -19,4 +21,5 @@ topic write sentinel/vision/detection
 user anomaly
 topic read sentinel/+/telemetry
 topic read sentinel/+/event
+topic read sentinel/+/relay/#
 topic write sentinel/ai/anomaly

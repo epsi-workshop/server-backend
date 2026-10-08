@@ -25,6 +25,7 @@ from .config import config
 from .ingest import Envelope, box_event, box_heartbeat, box_telemetry
 from .journal import write_log
 from .live import live
+from .mqtt import CommandError, bus
 from .util import utcnow
 
 POLL_S = 5
@@ -82,7 +83,19 @@ class SensorApi:
         if motion == self.motion:
             return
         self.motion = motion
-        await box_event(self._envelope("pir", {"state": int(motion)}), SOURCE)
+        env = self._envelope("pir", {"state": int(motion)})
+        await box_event(env, SOURCE)
+        await self._relay("event", env)
+
+    async def _relay(self, kind: str, env: Envelope) -> None:
+        """Mesures et PIR lus sur l'API de la carte, republiés sur sentinel/<boîtier>/relay/<kind> pour le
+        service anomaly, qui n'écoute que MQTT (ACL : le backend seul y écrit, anomaly seul y lit)."""
+        if not config.mqtt_enabled:
+            return
+        try:
+            await bus.publish(f"sentinel/{config.device_id}/relay/{kind}", env.model_dump(mode="json"), qos=0)
+        except CommandError:
+            pass  # broker momentanément injoignable : la mesure suivante arrivera dans 5 s
 
     async def _set_lid(self, is_open: bool, source: Any = None) -> None:
         """Porte du pot (capteur infrarouge HW-201) : seuls les changements sont transmis.
@@ -159,7 +172,9 @@ class SensorApi:
         telemetry = {k: v for k, v in (("temperature", _number(s.get("temperature_c"))),
                                        ("humidity", _number(s.get("humidity_pct")))) if v is not None}
         if telemetry:
-            await box_telemetry(self._envelope("telemetry", telemetry), SOURCE)
+            env = self._envelope("telemetry", telemetry)
+            await box_telemetry(env, SOURCE)
+            await self._relay("telemetry", env)
         pir = s.get("pir")
         if isinstance(pir, dict) and isinstance(pir.get("motion"), bool):
             await self._set_motion(pir["motion"])

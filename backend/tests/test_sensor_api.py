@@ -154,3 +154,19 @@ def test_token_sent_to_the_card(monkeypatch: pytest.MonkeyPatch) -> None:
     assert sensor_api.SensorApi("http://x").headers == {"Authorization": "Bearer s3cret"}
     monkeypatch.setattr(sensor_api.config, "sensor_api_token", "")
     assert sensor_api.SensorApi("http://x").headers == {}
+
+
+def test_card_readings_relayed_to_anomaly_service(sent: list[tuple[str, dict[str, Any]]],
+                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+    published: list[tuple[str, dict[str, Any]]] = []
+
+    async def publish(topic: str, payload: dict[str, Any], qos: int = 1) -> None:
+        published.append((topic, payload))
+
+    monkeypatch.setattr(sensor_api.config, "mqtt_enabled", True)
+    monkeypatch.setattr(sensor_api.bus, "publish", publish)
+    run(sensor_api.SensorApi("http://x")._apply_sensors({"temperature_c": 22.4, "humidity_pct": 41,
+                                                           "pir": {"motion": True}}))
+    topics = [t for t, _ in published]
+    assert topics == ["sentinel/box01/relay/telemetry", "sentinel/box01/relay/event"]
+    assert published[0][1]["device"] == "box01" and published[0][1]["data"]["temperature"] == 22.4

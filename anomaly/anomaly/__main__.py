@@ -1,6 +1,7 @@
 """Service anomaly : python -m anomaly
 
-Lit sentinel/<boîtier>/telemetry et sentinel/<boîtier>/event, publie sur sentinel/ai/anomaly à chaque mesure.
+Lit sentinel/<boîtier>/telemetry et sentinel/<boîtier>/event (ou leur relais sentinel/<boîtier>/relay/…, quand le
+backend lit la carte en HTTP), publie sur sentinel/ai/anomaly à chaque mesure.
 """
 import json
 import logging
@@ -103,7 +104,9 @@ def connect(inbox: "queue.Queue[tuple[str, bytes]]") -> mqtt.Client:
         log.log(logging.ERROR if rc.is_failure else logging.INFO, "MQTT %s:%d : %s",
                 config.mqtt_host, config.mqtt_port, rc)
         if not rc.is_failure:
-            c.subscribe([(f"{box}/telemetry", 1), (f"{box}/event", 1)])
+            # relay/ : mesures lues par le backend sur l'API HTTP de la carte UNO Q (SENSOR_API_URL)
+            c.subscribe([(f"{box}/telemetry", 1), (f"{box}/event", 1),
+                         (f"{box}/relay/telemetry", 0), (f"{box}/relay/event", 0)])
 
     def on_message(_c: mqtt.Client, _u: Any, msg: mqtt.MQTTMessage) -> None:
         try:
