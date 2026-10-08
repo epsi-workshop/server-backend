@@ -38,7 +38,7 @@ Toutes les commandes ci-dessous se tapent depuis ce dossier. Pour revoir la list
 
 ## 3. Ouvrir le dashboard
 
-1. Dans le navigateur du PC serveur : **https://localhost**. Depuis un autre poste du réseau du projet : **https://192.168.50.10**.
+1. Dans le navigateur du PC serveur : **https://localhost** (ou **https://127.0.0.1**). Depuis un autre poste du réseau du projet : **https://192.168.50.10**.
 2. Le navigateur affiche un avertissement de sécurité : c'est normal, le certificat vient de **notre propre autorité** (la PKI du projet), pas d'une autorité publique. Deux solutions :
    - rapide : « Avancé » puis « Accepter le risque et poursuivre » ;
    - propre (à faire sur chaque poste et pour la démo) : importer `/opt/sentinel-x/pki/ca.crt` dans le navigateur. Firefox : Paramètres > Vie privée et sécurité > Certificats > Afficher les certificats > Autorités > Importer, cocher « identifier des sites web ».
