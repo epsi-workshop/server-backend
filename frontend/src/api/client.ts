@@ -1,5 +1,5 @@
 import type {
-  Alert, AuditEntry, Badge, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogFilter,
+  Alert, AuditEntry, Badge, BadgeEnrollState, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogFilter,
   Point, RestartRequest, ServiceHealth, Settings, SystemState, User,
 } from "../types";
 
@@ -41,6 +41,10 @@ export interface Api {
   createBadge(b: { uid: string; owner: string }): Promise<Badge>;
   updateBadge(id: string, patch: Partial<Pick<Badge, "active" | "owner">>): Promise<Badge>;
   deleteBadge(id: string): Promise<void>;
+  /** Lance l'écoute du lecteur : le prochain badge passé est capturé au lieu d'être accepté ou refusé. */
+  startBadgeEnroll(): Promise<BadgeEnrollState>;
+  getBadgeEnroll(): Promise<BadgeEnrollState>;
+  stopBadgeEnroll(): Promise<void>;
 
   getTeam(): Promise<TeamMember[]>;
   /** photo : image en data URL ; le backend refuse une photo sans visage ou avec plusieurs visages. */

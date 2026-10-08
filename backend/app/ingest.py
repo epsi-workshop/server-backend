@@ -15,6 +15,7 @@ from pydantic import AwareDatetime, BaseModel, Field, ValidationError
 from sqlalchemy import select
 
 from .arming import apply_armed
+from . import badges
 from .config import config
 from .correlation import correlator
 from .db import BadgeRow, SessionLocal, TeamMemberRow, events, measurements
@@ -293,6 +294,15 @@ async def box_event(env: Envelope, source: str) -> None:
 
 async def _on_badge(env: Envelope, uid: str) -> None:
     """Le boîtier ne fait que lire le badge : la décision vient de la table badges (gérée par l'admin)."""
+    if badges.enrollment.active():
+        # Enregistrement en cours depuis le dashboard : le badge est capturé, ni accepté ni refusé.
+        async with SessionLocal() as db:
+            known = (await db.execute(select(BadgeRow).where(BadgeRow.uid == uid))).scalar_one_or_none()
+        badges.enrollment.uid, badges.enrollment.owner = uid, known.owner if known else None
+        await write_log("info", "boitier", f"Badge lu pour enregistrement : {uid}"
+                        + (f" (déjà enregistré : {known.owner})" if known else ""))
+        await badges.show("enroll", uid, known.owner if known else None)
+        return
     async with SessionLocal() as db:
         badge = (await db.execute(select(BadgeRow).where(BadgeRow.uid == uid))).scalar_one_or_none()
         accepted = badge is not None and badge.active
@@ -309,11 +319,13 @@ async def _on_badge(env: Envelope, uid: str) -> None:
         # Badge à deux états : un passage arme et verrouille, le suivant désarme et déverrouille.
         armed = not live.state.device.armed
         await apply_armed(armed)
+        await badges.show("ok", uid, badge.owner)  # type: ignore[union-attr]
         await write_log("info", "boitier", f"Système {'armé, porte verrouillée' if armed else 'désarmé, porte déverrouillée'} "
                                            f"par badge ({badge.owner})")  # type: ignore[union-attr]
     else:
         correlator.signal("badge_refuse", env.ts)
         await write_log("warn", "boitier", f"Badge refusé : {'désactivé' if badge else 'UID inconnu'} {uid}")
+        await badges.show("refused", uid, None)
 
 
 async def on_box_heartbeat(topic: str, payload: bytes) -> None:

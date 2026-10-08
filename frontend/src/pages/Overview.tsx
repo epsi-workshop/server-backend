@@ -23,16 +23,16 @@ export default function Overview() {
   return (
     <div className="grid">
       <FaceBanner face={c.lastFace} />
-      <Panel title="Pot sentinelle" className="span-4 row-2" tone={!d.online ? "crit" : s.pir.active ? "warn" : undefined}>
+      <Panel title="Boîtier box01" className="span-4 row-2" tone={!d.online ? "crit" : s.pir.active ? "warn" : undefined}>
         <PotSlot className="pot-view" state={{ online: d.online, motion: s.pir.active, cameraLive: camOpen, doorOpen: s.lid.open }} />
-        <p className="pot-caption">Le boîtier, camouflé en plante d'intérieur.</p>
+        <p className="pot-caption">Modèle 3D du boîtier · état en direct</p>
         <dl className="facts pot-legend">
-          <div><dt>Feuillage<small>caméra + servo</small></dt><dd><Dot tone={!c.online ? "crit" : camOpen ? "warn" : "ok"} />{!c.online ? "Hors ligne" : camOpen ? "En direct" : "En veille"}</dd></div>
+          <div><dt>Caméra<small>ESP32-CAM + servo</small></dt><dd><Dot tone={!c.online ? "crit" : camOpen ? "warn" : "ok"} />{!c.online ? "Hors ligne" : camOpen ? "En direct" : "En veille"}</dd></div>
           <div><dt>Porte<small>capteur infrarouge</small></dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouverte" : "Fermée"}</dd></div>
-          <div><dt>Pétale infrarouge<small>PIR</small></dt><dd><Dot tone={s.pir.active ? "warn" : "ok"} />{s.pir.active ? "Mouvement" : "Calme"}</dd></div>
-          <div><dt>Sève<small>DHT22</small></dt><dd>{fmtNum(s.temperature.value)} °C · {fmtNum(s.humidity.value, 0)} %</dd></div>
-          <div><dt>Verrou<small>badge RFID</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armé, porte verrouillée" : "Désarmé, porte libre"}</dd></div>
-          <div><dt>Racines<small>UNO Q</small></dt><dd><Dot tone={d.online ? "ok" : "crit"} />{d.online ? `En ligne · ${fmtDuration(d.uptimeS)}` : "Muet"}</dd></div>
+          <div><dt>Détecteur de présence<small>PIR</small></dt><dd><Dot tone={s.pir.active ? "warn" : "ok"} />{s.pir.active ? "Mouvement" : "Calme"}</dd></div>
+          <div><dt>Température · humidité<small>DHT22</small></dt><dd>{fmtNum(s.temperature.value)} °C · {fmtNum(s.humidity.value, 0)} %</dd></div>
+          <div><dt>Verrou<small>lecteur RFID</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armé, porte verrouillée" : "Désarmé, porte libre"}</dd></div>
+          <div><dt>Contrôleur<small>Arduino UNO Q</small></dt><dd><Dot tone={d.online ? "ok" : "crit"} />{d.online ? `En ligne · ${fmtDuration(d.uptimeS)}` : "Muet"}</dd></div>
         </dl>
       </Panel>
 

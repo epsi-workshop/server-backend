@@ -1,4 +1,4 @@
-/** Palette des objets 3D : céramique, métal brossé, sauge (le boîtier est un pot de fleurs camouflé). */
+/** Palette des objets 3D : céramique, métal brossé, sauge. */
 export const PALETTE = {
   ivory: "#ece8df",
   graphite: "#2a2a2d",
@@ -10,9 +10,9 @@ export const PALETTE = {
 
 /** Couleur d'état : sauge (normal), ocre (alerte), terre cuite (critique), gris (hors ligne). */
 export const STATE_COLOR = {
-  ok: "#8fae8b",
-  warn: "#d1a04a",
-  crit: "#c9614a",
+  ok: "#2fd683",
+  warn: "#ffb020",
+  crit: "#ff4f45",
   off: "#8a8a8f",
 } as const;
 

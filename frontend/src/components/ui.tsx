@@ -1,18 +1,43 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import type { Point } from "../types";
 import { errMsg } from "../util";
 import { Icon3DSlot } from "../three/Views";
 import type { IconKind } from "../three/Objects";
 
-/** Panneau en verre : coins de visée, icône 3D facultative, inclinaison vers la souris (profondeur). */
-/** Panneau à fond plein, icône 3D facultative à gauche du titre. */
+const TILT = 5; // inclinaison maximale d'un petit panneau, en degrés
+const TILT_REF = 380; // taille (px) jusqu'à laquelle l'inclinaison est pleine
+const TILT_OFF = 720; // au-delà (tableaux, graphiques, formulaires), le panneau se soulève sans s'incliner
+
+/** Le panneau s'incline vers la souris et un reflet métallique suit le pointeur (variables CSS, sans re-rendu). */
+function tilt(e: PointerEvent<HTMLElement>) {
+  if (e.pointerType !== "mouse") return;
+  const el = e.currentTarget;
+  const r = el.getBoundingClientRect();
+  const x = (e.clientX - r.left) / r.width;
+  const y = (e.clientY - r.top) / r.height;
+  el.style.setProperty("--mx", `${(x * 100).toFixed(1)}%`);
+  el.style.setProperty("--my", `${(y * 100).toFixed(1)}%`);
+  // L'angle décroît avec la taille : sur un grand panneau, quelques degrés déplacent les bords de dizaines de pixels.
+  const size = Math.max(r.width, r.height);
+  const max = size > TILT_OFF ? 0 : TILT * Math.min(1, TILT_REF / size) ** 2;
+  el.style.setProperty("--ry", `${((x - 0.5) * 2 * max).toFixed(2)}deg`);
+  el.style.setProperty("--rx", `${((0.5 - y) * 2 * max).toFixed(2)}deg`);
+}
+
+function untilt(e: PointerEvent<HTMLElement>) {
+  const st = e.currentTarget.style;
+  st.setProperty("--rx", "0deg");
+  st.setProperty("--ry", "0deg");
+}
+
+/** Panneau surélevé : icône 3D facultative, inclinaison et reflet métallique au survol. */
 export function Panel(props: {
   title: string; action?: ReactNode; children: ReactNode; className?: string; tone?: "ok" | "warn" | "crit";
   icon?: IconKind; iconValue?: number;
 }) {
   const iconTone = props.tone === "crit" ? "crit" : props.tone === "warn" ? "warn" : "ok";
   return (
-    <section className={`panel ${props.tone ? `panel-${props.tone}` : ""} ${props.className ?? ""}`}>
+    <section className={`panel ${props.tone ? `panel-${props.tone}` : ""} ${props.className ?? ""}`} onPointerMove={tilt} onPointerLeave={untilt}>
       <header className="panel-head">
         <div className="panel-title">
           {props.icon && <Icon3DSlot kind={props.icon} tone={iconTone} value={props.iconValue} className="panel-icon" />}

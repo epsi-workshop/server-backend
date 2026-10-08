@@ -307,6 +307,14 @@ class TeamMemberPatch(Camel):
     active: bool | None = None
 
 
+class BadgeEnrollState(Camel):
+    """Enregistrement par lecture : listening tant qu'aucun badge n'a été passé avant until."""
+    listening: bool
+    until: Ts | None
+    uid: str | None
+    owner: str | None  # titulaire actuel si le badge lu est déjà enregistré
+
+
 class BadgePatch(Camel):
     active: bool | None = None
     owner: Annotated[str, Field(max_length=64)] | None = None

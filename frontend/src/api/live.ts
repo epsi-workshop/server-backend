@@ -138,6 +138,9 @@ export const liveApi: Api = {
   createBadge: (b) => post("/api/badges", b),
   updateBadge: (id, p) => patch(`/api/badges/${seg(id)}`, p),
   deleteBadge: (id) => del(`/api/badges/${seg(id)}`),
+  startBadgeEnroll: () => post("/api/badges/enroll", {}),
+  getBadgeEnroll: () => get("/api/badges/enroll"),
+  stopBadgeEnroll: () => del("/api/badges/enroll"),
 
   getTeam: () => get("/api/team"),
   createMember: (m) => post("/api/team", m),

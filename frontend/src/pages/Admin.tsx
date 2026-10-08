@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { BellRing, Camera, ImagePlus, KeyRound, Power, RefreshCw, Trash2, UserPlus } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BellRing, Camera, ImagePlus, Nfc, KeyRound, Power, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { api } from "../api";
 import { useAuth, useLive, useToast } from "../store";
 import { Confirm, Dot, Empty, Loading, Panel, Tabs } from "../components/ui";
-import type { Badge, RestartRequest, Role, ServiceHealth, Settings, TeamMember, User } from "../types";
+import type { Badge, BadgeEnrollState, RestartRequest, Role, ServiceHealth, Settings, TeamMember, User } from "../types";
 import { ROLE_LABEL, ago, errMsg, fmtDuration, fmtNum } from "../util";
 
 type Tab = "systeme" | "utilisateurs" | "equipe" | "badges" | "detection";
@@ -315,11 +315,55 @@ function TeamTab() {
 }
 
 // ---------------------------------------------------------------- Badges
+/** « Lire un badge » : le backend écoute le lecteur 30 s ; l'UID du prochain badge passé remplit le formulaire. */
+function BadgeReader({ onRead }: { onRead: (uid: string) => void }) {
+  const toast = useToast();
+  const [state, setState] = useState<BadgeEnrollState | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const listening = !!state?.listening;
+  const onReadRef = useRef(onRead);
+  onReadRef.current = onRead;
+  useEffect(() => {
+    if (!listening) return;
+    const t = setInterval(async () => {
+      setNow(Date.now());
+      try {
+        const s = await api.getBadgeEnroll();
+        setState(s);
+        if (s.uid) {
+          onReadRef.current(s.uid);
+          toast(s.owner ? `Badge ${s.uid} déjà enregistré (${s.owner})` : `Badge ${s.uid} lu`, s.owner ? "err" : undefined);
+        } else if (!s.listening) toast("Aucun badge passé : lecture arrêtée.", "err");
+      } catch (e) { toast(errMsg(e), "err"); setState(null); }
+    }, 700);
+    return () => clearInterval(t);
+  }, [listening, toast]);
+  useEffect(() => () => { api.stopBadgeEnroll().catch(() => {}); }, []);  // onglet quitté : on arrête l'écoute
+  const left = state?.until ? Math.max(0, Math.ceil((Date.parse(state.until) - now) / 1000)) : 0;
+  return (
+    <div className={`badge-reader${listening ? " is-listening" : ""}`}>
+      <span className="badge-reader-icon"><Nfc size={22} /></span>
+      <div>
+        <strong>{listening ? "Passez le badge devant le lecteur…" : "Lire un badge sur le boîtier"}</strong>
+        <span className="muted small">{listening ? `Écoute en cours, ${left} s restantes. Le badge ne sera ni accepté ni refusé.` : "Son UID remplit le formulaire, il ne reste qu'à choisir le titulaire."}</span>
+      </div>
+      {listening
+        ? <button className="btn" type="button" onClick={async () => { await api.stopBadgeEnroll(); setState(null); }}>Annuler</button>
+        : <button className="btn btn-primary" type="button" onClick={async () => {
+            try { setNow(Date.now()); setState(await api.startBadgeEnroll()); } catch (e) { toast(errMsg(e), "err"); }
+          }}>Lire un badge</button>}
+    </div>
+  );
+}
+
 function BadgesTab() {
   const toast = useToast();
   const [badges, setBadges] = useState<Badge[] | null>(null);
   const [form, setForm] = useState({ uid: "", owner: "" });
   const [toDelete, setToDelete] = useState<Badge | null>(null);
+  const [users, setUsers] = useState<User[]>([]);
+  const ownerRef = useRef<HTMLInputElement>(null);
+  useEffect(() => { api.getUsers().then(setUsers).catch(() => setUsers([])); }, []);
   const load = useCallback(() => api.getBadges().then(setBadges).catch((e) => toast(errMsg(e), "err")), [toast]);
   useEffect(() => { load(); }, [load]);
   const act = async (fn: () => Promise<unknown>, ok: string) => {
@@ -357,14 +401,16 @@ function BadgesTab() {
         <p className="muted small">Les badges MIFARE Classic sont clonables : un badge seul ne doit jamais suffire à couper la surveillance sans trace. Chaque désarmement par badge est journalisé et notifié.</p>
       </Panel>
       <Panel title="Enregistrer un badge">
+        <BadgeReader onRead={(uid) => { setForm((f) => ({ ...f, uid })); ownerRef.current?.focus(); }} />
         <form className="form-row" onSubmit={async (e) => {
           e.preventDefault();
           if (await act(() => api.createBadge(form), "Badge enregistré")) setForm({ uid: "", owner: "" });
         }}>
-          <label className="field"><span>UID (lu sur le boîtier)</span>
+          <label className="field"><span>UID</span>
             <input required placeholder="04:A3:1F:6B" value={form.uid} onChange={(e) => setForm({ ...form, uid: e.target.value })} className="tabular" /></label>
-          <label className="field field-grow"><span>Titulaire</span>
-            <input required value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} /></label>
+          <label className="field field-grow"><span>Titulaire (compte ou nom)</span>
+            <input ref={ownerRef} required list="badge-owners" value={form.owner} onChange={(e) => setForm({ ...form, owner: e.target.value })} />
+            <datalist id="badge-owners">{users.map((u) => <option key={u.id} value={u.username} />)}</datalist></label>
           <button className="btn btn-primary" type="submit">Enregistrer le badge</button>
         </form>
       </Panel>

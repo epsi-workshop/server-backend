@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import delete, select
 
+from .. import badges as badge_reader
 from ..convert import to_badge, to_member, to_user
 from ..db import BadgeRow, SessionRow, SettingsRow, TeamMemberRow, UserRow, apply_retention
 from ..deps import Admin, Db, client_ip
@@ -16,7 +17,7 @@ from ..hub import hub
 from ..journal import write_audit, write_log
 from ..live import live
 from ..schemas import (
-    Badge, BadgeCreate, BadgePatch, PasswordResetIn, Settings, TeamMember, TeamMemberCreate, TeamMemberPatch,
+    Badge, BadgeCreate, BadgeEnrollState, BadgePatch, PasswordResetIn, Settings, TeamMember, TeamMemberCreate, TeamMemberPatch,
     User, UserCreate, UserPatch, dump,
 )
 from ..security import check_password_policy, hash_password
@@ -113,6 +114,29 @@ async def _get_badge(db: Db, badge_id: uuid.UUID) -> BadgeRow:
 @router.get("/badges")
 async def list_badges(_: Admin, db: Db) -> list[Badge]:
     return [to_badge(b) for b in (await db.execute(select(BadgeRow).order_by(BadgeRow.owner))).scalars()]
+
+
+@router.post("/badges/enroll")
+async def start_badge_enroll(request: Request, admin: Admin) -> BadgeEnrollState:
+    """Écoute le lecteur : le prochain badge passé est capturé (ni accepté ni refusé) pour être enregistré."""
+    badge_reader.enrollment.start()
+    await write_audit(admin.username, "Lecture d'un badge à enregistrer lancée", client_ip(request))
+    return _enroll_state()
+
+
+@router.get("/badges/enroll")
+async def get_badge_enroll(_: Admin) -> BadgeEnrollState:
+    return _enroll_state()
+
+
+@router.delete("/badges/enroll", status_code=204)
+async def stop_badge_enroll(_: Admin) -> None:
+    badge_reader.enrollment.stop()
+
+
+def _enroll_state() -> BadgeEnrollState:
+    e = badge_reader.enrollment
+    return BadgeEnrollState(listening=e.active(), until=e.until, uid=e.uid, owner=e.owner)
 
 
 @router.post("/badges")

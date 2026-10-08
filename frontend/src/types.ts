@@ -115,6 +115,15 @@ export interface TeamMember {
   lastSeen: string | null;
 }
 
+/** Enregistrement par lecture : listening tant qu'aucun badge n'a été passé. */
+export interface BadgeEnrollState {
+  listening: boolean;
+  until: string | null;
+  uid: string | null;
+  /** Titulaire si le badge lu est déjà enregistré. */
+  owner: string | null;
+}
+
 export interface Badge {
   id: string;
   uid: string;

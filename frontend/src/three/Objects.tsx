@@ -44,7 +44,7 @@ function Studio({ children, z = 4.4 }: { children: ReactNode; z?: number }) {
   );
 }
 
-function StudioEnvironment({ resolution = 128 }: { resolution?: number }) {
+export function StudioEnvironment({ resolution = 128 }: { resolution?: number }) {
   return (
     <Environment resolution={resolution} frames={1}>
       <Lightformer form="rect" intensity={3} position={[0, 3, 3]} scale={[6, 1.2, 1]} />
@@ -122,28 +122,6 @@ export function Logo3D() {
         </mesh>
         <Leaf position={[0, -0.5, 0.05]} scale={[0.75, 0.95, 0.75]} color={PALETTE.sage} />
       </group>
-    </Studio>
-  );
-}
-
-// ------------------------------------------------------------------------------------- galet d'état
-
-/** Galet de céramique émaillée qui respire doucement, couleur = niveau de menace. */
-export function ThreatCore({ color, critical }: { color: string; critical: boolean }) {
-  const ref = useRef<THREE.Mesh>(null);
-  useFrame(({ clock }) => {
-    if (!ref.current) return;
-    const t = clock.elapsedTime * MOTION * (critical ? 3 : 1);
-    const k = 1 + Math.sin(t * 1.4) * 0.03;
-    ref.current.scale.set(k, 0.8 * k, k);
-    ref.current.rotation.y = t * 0.2;
-  });
-  return (
-    <Studio z={3.4}>
-      <mesh ref={ref}>
-        <sphereGeometry args={[0.85, 64, 64]} />
-        <Ceramic color={color} rough={0.25} />
-      </mesh>
     </Studio>
   );
 }

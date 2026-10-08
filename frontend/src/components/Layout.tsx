@@ -1,10 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Activity, Bell, Camera, KeyRound, LayoutGrid, LogOut, Moon, ScrollText, Settings2, ShieldCheck, ShieldOff, Sun } from "lucide-react";
+import { Activity, Bell, Camera, KeyRound, LayoutGrid, LogOut, Moon, ScrollText, Settings2, ShieldAlert, ShieldCheck, ShieldOff, Siren, Sun, WifiOff, type LucideIcon } from "lucide-react";
 import { Suspense, useState } from "react";
 import { api } from "../api";
 import { useAuth, useLive, useToast } from "../store";
 import { Confirm, Loading } from "./ui";
-import { Logo3DSlot, ThreatCoreSlot, type CoreLevel } from "../three/Views";
+import { Logo3DSlot } from "../three/Views";
 import { useTheme } from "../theme";
 import { ChangePasswordDialog } from "../pages/ChangePassword";
 import { LEVEL_LABEL, ROLE_LABEL, ago, cameraOpen, errMsg } from "../util";
@@ -70,24 +70,39 @@ export default function Layout() {
   );
 }
 
+type Level = "info" | "alerte" | "critique" | "offline";
+const LEVEL_ICON: Record<Level, LucideIcon> = { info: ShieldCheck, alerte: ShieldAlert, critique: Siren, offline: WifiOff };
+const LEVEL_STEP: Record<Level, number> = { offline: 0, info: 1, alerte: 2, critique: 3 };
+
+/** Témoin de niveau : pastille à icône + trois barres qui se remplissent avec la menace. */
+function LevelSignal({ level }: { level: Level }) {
+  const Icon = LEVEL_ICON[level];
+  const step = LEVEL_STEP[level];
+  return (
+    <div className="signal" aria-hidden="true">
+      <span className="signal-tile"><Icon size={20} strokeWidth={2.2} /></span>
+      <span className="signal-bars">{[1, 2, 3].map((i) => <i key={i} className={i <= step ? "on" : ""} />)}</span>
+    </div>
+  );
+}
+
 /** Bandeau d'état : la pièce maîtresse, couleur = niveau de menace. */
 function Annunciator() {
   const { state, connected } = useLive();
   const { can } = useAuth();
   const toast = useToast();
   const [confirmDisarm, setConfirmDisarm] = useState(false);
-  const ambient: CoreLevel = !state ? "offline" : !state.device.online ? "critique" : state.threat.level;
-  if (!state) return <div className="annun annun-off"><ThreatCoreSlot level="offline" className="annun-core" /><div className="annun-level"><span>Connexion au serveur…</span></div></div>;
-  const lvl = !state.device.online ? "critique" : state.threat.level;
+  if (!state) return <div className="annun annun-offline"><LevelSignal level="offline" /><div className="annun-level"><span className="annun-word">Connexion au serveur…</span></div></div>;
+  const lvl: Level = !state.device.online ? "offline" : state.threat.level;
   const arm = async () => {
     try { await api.arm(); toast("Système armé"); } catch (e) { toast(errMsg(e), "err"); }
   };
   return (
     <div className={`annun annun-${lvl}`}>
-      <ThreatCoreSlot level={ambient} className="annun-core" />
+      <LevelSignal level={lvl} />
       <div className="annun-level">
-        <span className="annun-word">{state.device.online ? LEVEL_LABEL[state.threat.level] : "Boîtier muet"}</span>
-        <span className="annun-score">score {state.threat.score}</span>
+        <span className="annun-kicker">Niveau de menace</span>
+        <span className="annun-word">{state.device.online ? LEVEL_LABEL[state.threat.level] : "Boîtier muet"}<span className="annun-score">{state.threat.score}</span></span>
       </div>
       <p className="annun-reasons">
         {!state.device.online
