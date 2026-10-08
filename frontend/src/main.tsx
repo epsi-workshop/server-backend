@@ -1,11 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import "@fontsource/inter/latin-400.css";
-import "@fontsource/inter/latin-500.css";
-import "@fontsource/inter/latin-600.css";
-import "@fontsource/fraunces/latin-300.css";
-import "@fontsource/fraunces/latin-400.css";
-import "@fontsource/fraunces/latin-400-italic.css";
+import "@fontsource-variable/geist";
+import "@fontsource-variable/geist-mono";
 import "./theme";
 import "./styles.css";
 import { initApi } from "./api";

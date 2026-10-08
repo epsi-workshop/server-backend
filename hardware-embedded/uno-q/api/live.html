@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PIR en direct</title>
+<style>
+  :root { --bg:#0f1214; --fg:#e8ecef; --muted:#8a949c; --on:#22c55e; --off:#2a3238; }
+  body { margin:0; font-family:system-ui,sans-serif; background:var(--bg); color:var(--fg);
+         display:flex; flex-direction:column; align-items:center; justify-content:center; min-height:100vh; gap:24px; padding:16px; box-sizing:border-box; }
+  #dot { width:160px; height:160px; border-radius:50%; background:var(--off); transition:background .15s, box-shadow .15s; }
+  #dot.on { background:var(--on); box-shadow:0 0 60px var(--on); }
+  #label { font-size:28px; font-weight:600; }
+  #meta, #conn { color:var(--muted); font-size:14px; }
+  #log { width:100%; max-width:480px; font:12px ui-monospace,monospace; color:var(--muted); max-height:200px; overflow:auto; }
+</style>
+</head>
+<body>
+  <div id="dot"></div>
+  <div id="label">…</div>
+  <div id="meta"></div>
+  <div id="conn">connexion…</div>
+  <div id="log"></div>
+<script>
+const dot = document.getElementById("dot"), label = document.getElementById("label"),
+      meta = document.getElementById("meta"), conn = document.getElementById("conn"), log = document.getElementById("log");
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws/pir`);
+  ws.onopen = () => conn.textContent = "connecté";
+  ws.onclose = () => { conn.textContent = "déconnecté, reconnexion…"; setTimeout(connect, 1000); };
+  ws.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    dot.classList.toggle("on", !!m.motion);
+    label.textContent = m.motion ? "Mouvement détecté" : "Rien";
+    meta.textContent = `${m.detections ?? "?"} détections`;
+    if (m.event !== "heartbeat") {
+      const line = document.createElement("div");
+      line.textContent = `${new Date(m.ts * 1000).toLocaleTimeString()}  ${m.event}`;
+      log.prepend(line);
+    }
+  };
+}
+connect();
+</script>
+</body>
+</html>

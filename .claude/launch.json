@@ -1,0 +1,44 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "/Users/victorboyadjian/Documents/dev/server-backend/backend/.venv/bin/uvicorn",
+      "runtimeArgs": [
+        "app.main:app",
+        "--port",
+        "8000",
+        "--app-dir",
+        "/Users/victorboyadjian/Documents/dev/server-backend/backend"
+      ],
+      "port": 8000
+    },
+    {
+      "name": "vision",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/victorboyadjian/Documents/dev/server-backend/vision && exec .venv/bin/python -m vision"
+      ],
+      "port": 8081
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/victorboyadjian/Documents/dev/server-backend/frontend && exec npm run dev -- --port 5173"
+      ],
+      "port": 5173
+    },
+    {
+      "name": "frontend-mock",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/victorboyadjian/Documents/dev/server-backend/frontend && VITE_API_MODE=mock exec npx vite --port 5174"
+      ],
+      "port": 5174
+    }
+  ]
+}

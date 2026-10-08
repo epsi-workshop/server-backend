@@ -20,7 +20,7 @@ import httpx
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
-from . import arming
+from . import arming, badges
 from .config import config
 from .ingest import Envelope, box_event, box_heartbeat, box_telemetry
 from .journal import write_log
@@ -28,6 +28,7 @@ from .live import live
 from .util import utcnow
 
 POLL_S = 5
+RFID_POLL_S = 0.5  # badge : lu à part, plus souvent, pour une réponse immédiate à l'écran
 HEALTH_EVERY = 3  # /health une fois sur 3, soit toutes les 15 s comme le heartbeat du contrat
 RETRY_S = 3
 # Connexion longue : sous Windows, la résolution d'un nom en .local (mDNS) peut prendre plus de 10 s.
@@ -41,6 +42,8 @@ IPV4_ONLY = "0.0.0.0"
 ROUTE_HEALTH = "/health"
 ROUTE_SENSORS = "/sensors"
 ROUTE_ARMED = "/system/armed"  # + /on ou /off : armement poussé à l'UNO Q
+ROUTE_RFID = "/sensors/rfid"
+ROUTE_DISPLAY_BADGE = "/display/badge"  # résultat d'un badge sur l'écran OLED
 ROUTE_WS_PIR = "/ws/pir"
 ROUTE_OPENAPI = "/openapi.json"  # lue une fois, pour la version affichée dans l'administration
 
@@ -103,6 +106,31 @@ class SensorApi:
                 (await client.post(f"{ROUTE_ARMED}/{'on' if armed else 'off'}")).raise_for_status()
         except httpx.HTTPError as e:
             await write_log("warn", "boitier", f"Armement non transmis à l'UNO Q : {type(e).__name__}")
+
+    async def push_badge(self, result: str, uid: str, name: str | None) -> None:
+        """Résultat d'un passage de badge sur l'écran OLED : accepté, refusé ou lu pour enregistrement."""
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=TIMEOUT,
+                                     transport=httpx.AsyncHTTPTransport(local_address=IPV4_ONLY)) as client:
+            (await client.post(ROUTE_DISPLAY_BADGE, json={
+                "result": result, "uid": uid, "name": (name or "")[:16], "armed": live.state.device.armed,
+            })).raise_for_status()
+
+    async def poll_rfid(self) -> None:
+        """Badge seul, toutes les RFID_POLL_S : /sensors (toutes les 5 s) ferait attendre l'utilisateur."""
+        transport = httpx.AsyncHTTPTransport(local_address=IPV4_ONLY)
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=TIMEOUT, transport=transport) as client:
+            while True:
+                try:
+                    r = await client.get(ROUTE_RFID)
+                    r.raise_for_status()
+                    rfid = r.json()
+                    if isinstance(rfid, dict) and isinstance(rfid.get("seq"), int) and not isinstance(rfid["seq"], bool):
+                        await self._set_rfid(rfid["seq"], rfid.get("uid") or "")
+                except (httpx.HTTPError, ValueError):
+                    await asyncio.sleep(RETRY_S)  # panne signalée par poll(), pas de journal ici
+                except Exception:  # noqa: BLE001
+                    log.exception("Erreur de lecture du badge")
+                await asyncio.sleep(RFID_POLL_S)
 
     async def _apply_sensors(self, s: dict[str, Any]) -> None:
         telemetry = {k: v for k, v in (("temperature", _number(s.get("temperature_c"))),
@@ -182,10 +210,11 @@ class SensorApi:
 
     async def run(self) -> None:
         await write_log("info", "backend", f"Capteurs lus sur l'API {self.base_url}")
-        await asyncio.gather(self.poll(), self.listen())
+        await asyncio.gather(self.poll(), self.listen(), self.poll_rfid())
 
 
 # Instance unique : démarrée par main.py, lue par l'état des services (routers/control.py).
 sensor_api = SensorApi(config.sensor_api_url) if config.sensor_api_url else None
 if sensor_api:
     arming.hooks.append(sensor_api.push_armed)
+    badges.hooks.append(sensor_api.push_badge)

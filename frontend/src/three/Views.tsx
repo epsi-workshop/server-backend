@@ -1,7 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { View } from "@react-three/drei";
-import { Icon3D, Logo3D, PotSentinel, ThreatCore, type IconKind, type PotState, type Tone } from "./Objects";
-import { STATE_COLOR } from "./threat";
+import { Icon3D, Logo3D, PotSentinel, type IconKind, type PotState, type Tone } from "./Objects";
 
 /**
  * Un seul canvas WebGL, au-dessus des panneaux, dans lequel sont dessinés tous les objets 3D de
@@ -23,13 +22,6 @@ export function Icon3DSlot({ kind, tone = "ok", value, className }: { kind: Icon
 
 export function Logo3DSlot({ className }: { className?: string }) {
   return <View className={`slot3d ${className ?? ""}`}><Logo3D /></View>;
-}
-
-export type CoreLevel = "info" | "alerte" | "critique" | "offline";
-const CORE_COLOR: Record<CoreLevel, string> = { info: STATE_COLOR.ok, alerte: STATE_COLOR.warn, critique: STATE_COLOR.crit, offline: STATE_COLOR.off };
-
-export function ThreatCoreSlot({ level, className }: { level: CoreLevel; className?: string }) {
-  return <View className={`slot3d ${className ?? ""}`}><ThreatCore color={CORE_COLOR[level]} critical={level === "critique"} /></View>;
 }
 
 export function PotSlot({ state, className }: { state: PotState; className?: string }) {

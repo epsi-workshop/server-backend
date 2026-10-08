@@ -15,6 +15,11 @@ export default defineConfig(({ mode }) => {
   const headers = { Origin: backend };
   return {
     plugins: mode === "single" ? [react(), viteSingleFile()] : [react()],
+    // Deux pages : le tableau de bord (index.html) et la page de présentation (presentation.html).
+    // Le build autonome (mode single) ne contient que le tableau de bord.
+    build: mode === "single" ? {} : {
+      rolldownOptions: { input: { main: "index.html", presentation: "presentation.html" } },
+    },
     server: {
       port: 5173,
       proxy: {

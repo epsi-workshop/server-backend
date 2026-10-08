@@ -4,7 +4,7 @@ import type { Api } from "./client";
 import { ApiError, notifyUnauthorized } from "./client";
 import { hasRole } from "../util";
 import type {
-  Alert, AuditEntry, Badge, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogLevel, LogSource,
+  Alert, AuditEntry, Badge, BadgeEnrollState, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogLevel, LogSource,
   Point, RestartRequest, RestartTarget, Role, ServiceHealth, Settings, SystemState, ThreatLevel, User,
 } from "../types";
 import { captureDataUrl, type SceneOpts } from "./mockScene";
@@ -25,6 +25,7 @@ const users: (User & { password: string })[] = [
 ];
 
 const team: TeamMember[] = [];
+let enroll: BadgeEnrollState = { listening: false, until: null, uid: null, owner: null };
 
 const badges: Badge[] = [
   { id: "b1", uid: "04:A3:1F:6B", owner: "Équipe infra", active: true, lastUsed: iso(Date.now() - 3 * HOUR) },
@@ -632,6 +633,17 @@ export const mockApi: Api = {
     badges.splice(badges.indexOf(b), 1);
     auditAdd(`Badge supprimé : ${b.uid}`);
   },
+
+  // Démo : un badge fictif est « passé » 3 s après le lancement de l'écoute.
+  async startBadgeEnroll() {
+    need("admin"); await wait();
+    const started = Date.now();
+    enroll = { listening: true, until: iso(started + 30_000), uid: null, owner: null };
+    setTimeout(() => { if (enroll.listening && Date.parse(enroll.until!) > Date.now()) enroll = { ...enroll, listening: false, uid: "04:5E:88:D2" }; }, 3000);
+    return clone(enroll);
+  },
+  async getBadgeEnroll() { need("admin"); return clone(enroll); },
+  async stopBadgeEnroll() { need("admin"); enroll = { listening: false, until: null, uid: null, owner: null }; },
 
   async getTeam() { need("admin"); await wait(); return clone(team); },
   async createMember(m) {
