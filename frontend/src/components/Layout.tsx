@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from "react-router-dom";
-import { Activity, Bell, Camera, KeyRound, LayoutGrid, LogOut, Moon, ScrollText, Settings2, ShieldAlert, ShieldCheck, ShieldOff, Siren, Sun, WifiOff, type LucideIcon } from "lucide-react";
+import { Activity, Bell, Camera, Download, KeyRound, LayoutGrid, LogOut, Moon, ScrollText, Settings2, ShieldAlert, ShieldCheck, ShieldOff, Siren, Sun, WifiOff, type LucideIcon } from "lucide-react";
 import { Suspense, useState } from "react";
 import { api } from "../api";
 import { useAuth, useLive, useToast } from "../store";
 import { Confirm, Loading } from "./ui";
 import { Logo3DSlot } from "../three/Views";
 import { useTheme } from "../theme";
+import { useInstall } from "../pwa";
 import { ChangePasswordDialog } from "../pages/ChangePassword";
 import { LEVEL_LABEL, ROLE_LABEL, ago, cameraOpen, errMsg } from "../util";
 
@@ -55,6 +56,7 @@ export default function Layout() {
             <span>{user && ROLE_LABEL[user.role]}{api.mode === "mock" ? " (démo)" : ""}</span>
           </div>
           <div className="me-actions">
+            <InstallButton />
             <ThemeToggle />
             <button className="icon-btn" onClick={() => setPwdOpen(true)} aria-label="Changer mon mot de passe" title="Changer mon mot de passe"><KeyRound size={18} /></button>
             <button className="icon-btn" onClick={logout} aria-label="Se déconnecter" title="Se déconnecter"><LogOut size={18} /></button>
@@ -125,6 +127,19 @@ function Annunciator() {
         onConfirm={async () => { await api.disarm(); toast("Système désarmé", "warn"); }} />
     </div>
   );
+}
+
+/** « Installer l'application » : invite du navigateur, ou consigne Safari sur iPhone / iPad. */
+function InstallButton() {
+  const { available, ios, install } = useInstall();
+  const toast = useToast();
+  if (!available) return null;
+  const label = "Installer l'application";
+  const onClick = async () => {
+    if (ios) { toast("Sur iPhone ou iPad : bouton Partager de Safari, puis « Sur l'écran d'accueil »."); return; }
+    if (await install()) toast("Application installée");
+  };
+  return <button className="icon-btn" onClick={onClick} aria-label={label} title={label}><Download size={18} /></button>;
 }
 
 function ThemeToggle() {

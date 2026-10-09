@@ -39,6 +39,15 @@
         "cd /Users/victorboyadjian/Documents/dev/server-backend/frontend && VITE_API_MODE=mock exec npx vite --port 5174"
       ],
       "port": 5174
+    },
+    {
+      "name": "frontend-preview",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "cd /Users/victorboyadjian/Documents/dev/server-backend/frontend && exec npx vite preview --port 4173 --strictPort"
+      ],
+      "port": 4173
     }
   ]
 }

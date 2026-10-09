@@ -129,3 +129,20 @@ Et router dans le `Caddyfile` (port du backend à adapter) :
 L'export CSV des journaux neutralise les cellules commençant par `= + - @` (injection de formules dans Excel).
 
 `npm audit` signale encore `braces` via `vite-plugin-singlefile` : aucune version corrigée n'existe, la dépendance ne sert qu'au build de démo `build:single` et ne traite aucune donnée externe.
+
+## Application installable (web app)
+
+Le tableau de bord s'installe comme une application (icône sur l'écran d'accueil, fenêtre sans barre d'adresse) :
+
+- `public/manifest.webmanifest` : nom, icônes, couleurs, raccourcis Alertes et Caméra ; `start_url` = `/index.html`, servi aussi bien par le déploiement Docker que par l'UNO Q.
+- `public/sw.js` : service worker. Pages en réseau d'abord avec copie de secours (l'application s'ouvre hors connexion et affiche la reconnexion), `/assets/` en cache, `/api` et `/ws` jamais mis en cache. Changer `VERSION` pour invalider les pages en cache.
+- `public/icons/` : icônes (192, 512, masquable Android, Apple 180, favicon).
+- `src/pwa.ts` : enregistrement du service worker (production, contexte sécurisé, hors build autonome) et bouton « Installer l'application » dans la barre latérale.
+- nginx (`nginx.conf`, `deploy/uno-q/nginx.conf`) : `sw.js` et le manifeste ne sont jamais mis en cache, le manifeste est servi en `application/manifest+json`.
+
+Installer :
+
+- **Android, ordinateur (Chrome, Edge)** : bouton « Installer l'application » du tableau de bord, ou menu du navigateur.
+- **iPhone, iPad (Safari)** : Partager, puis « Sur l'écran d'accueil ».
+
+Le service worker et l'invite d'installation n'existent qu'en **HTTPS** (ou sur `localhost`), avec un certificat reconnu par l'appareil. Servi en HTTP (`http://talos.local`), l'ajout à l'écran d'accueil reste possible sur iPhone et iPad, mais sans fonctionnement hors connexion ni invite d'installation sur Android.
