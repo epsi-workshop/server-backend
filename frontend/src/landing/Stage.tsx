@@ -111,8 +111,10 @@ function Box({ live }: { live: LiveRef }) {
  */
 const HOTSPOTS: { at: [number, number, number]; label: string; detail: string; side: "l" | "r" }[] = [
   { at: [0.005, 1.47, 0.57], label: "ESP32-CAM et laser", detail: "cachés dans le nez", side: "l" },
-  { at: [0, 0.09, -1.0], label: "Arduino UNO Q et breadboard", detail: "sur leur socle, derrière", side: "l" },
-  { at: [0.0, 0.02, -0.55], label: "Câbles", detail: "passent sous la citrouille jusqu'à la tête", side: "r" },
+  { at: [0.0, 1.22, 0.4], label: "Lecteur RFID", detail: "dans la tête, derrière la bouche", side: "l" },
+  { at: [-0.05, 0.55, 0.44], label: "DHT22", detail: "température et humidité, sous la cape", side: "l" },
+  { at: [0.14, 0.08, 0.53], label: "Détecteur PIR", detail: "sous la cape", side: "r" },
+  { at: [0, 0.09, -1.0], label: "Arduino UNO Q et breadboard", detail: "derrière ; câbles sous la citrouille", side: "l" },
 ];
 
 // ------------------------------------------------------------------------------------- sol et salle
@@ -237,10 +239,11 @@ function Access({ live }: { live: LiveRef }) {
       card.current.style.transform = `translateY(${(1 - o) * 40}px)`;
       card.current.style.visibility = o > 0.01 ? "visible" : "hidden";
     }
-    // Le badge vient se présenter devant le lecteur RFID, dans le buste, puis repart.
+    // Le badge vient se présenter devant la bouche : le lecteur RFID est dans la tête.
     const [px, , pz] = p.box;
-    rest.set(px - 0.9, 0.55, pz + 1.5);
-    tap.set(px - 0.3, 0.38, pz + 0.78);
+    const k = p.scale;
+    rest.set(px - 0.95, 0.75, pz + 1.5);
+    tap.set(px - 0.08 * k, 1.22 * k, pz + 0.66 * k);
     const t = (clock.elapsedTime * MOTION) % BADGE_CYCLE;
     const go = t < 1.1 ? easeInOut(t / 1.1) : t < 1.9 ? 1 : t < 3 ? 1 - easeInOut((t - 1.9) / 1.1) : 0;
     if (badge.current) {

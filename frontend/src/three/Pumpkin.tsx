@@ -271,6 +271,28 @@ function Body({ dim }: { dim: boolean }) {
           <Fabric dim={dim} />
         </mesh>
       ))}
+      <PirSensor />
+    </group>
+  );
+}
+
+/**
+ * Détecteur de présence PIR : posé sous la cape, seul son dôme blanc dépasse de l'ourlet, à l'avant.
+ * (Le DHT22, également sous la cape, et le lecteur RFID, dans la tête, ne sont pas visibles.)
+ */
+function PirSensor() {
+  const y = 0.04;
+  const z = bodyRadius(y) * BODY_SZ + 0.025;
+  return (
+    <group position={[0.14, y, z]}>
+      <mesh position={[0, 0.005, -0.03]}>
+        <boxGeometry args={[0.15, 0.012, 0.11]} />
+        <meshStandardMaterial color="#1f6b45" roughness={0.5} />
+      </mesh>
+      <mesh position={[0, 0.011, 0]}>
+        <sphereGeometry args={[0.053, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <meshPhysicalMaterial color="#f4f4f1" roughness={0.35} transmission={0.15} thickness={0.02} clearcoat={0.4} />
+      </mesh>
     </group>
   );
 }

@@ -24,9 +24,9 @@ export default function Overview() {
         <dl className="facts pot-legend">
           <div><dt>Caméra<small>ESP32-CAM et laser, dans le nez</small></dt><dd><Dot tone={!c.online ? "crit" : camOpen ? "warn" : "ok"} />{!c.online ? "Hors ligne" : camOpen ? "En direct" : "En veille"}</dd></div>
           <div><dt>Capot<small>ouverture du boîtier, capteur infrarouge</small></dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouvert" : "Fermé"}</dd></div>
-          <div><dt>Détecteur de présence<small>PIR</small></dt><dd><Dot tone={s.pir.active ? "warn" : "ok"} />{s.pir.active ? "Mouvement" : "Calme"}</dd></div>
-          <div><dt>Température · humidité<small>DHT22</small></dt><dd>{fmtNum(s.temperature.value)} °C · {fmtNum(s.humidity.value, 0)} %</dd></div>
-          <div><dt>Armement<small>badge RFID</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armé" : "Désarmé"}</dd></div>
+          <div><dt>Détecteur de présence<small>PIR, sous la cape</small></dt><dd><Dot tone={s.pir.active ? "warn" : "ok"} />{s.pir.active ? "Mouvement" : "Calme"}</dd></div>
+          <div><dt>Température · humidité<small>DHT22, sous la cape</small></dt><dd>{fmtNum(s.temperature.value)} °C · {fmtNum(s.humidity.value, 0)} %</dd></div>
+          <div><dt>Armement<small>lecteur RFID dans la tête</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armé" : "Désarmé"}</dd></div>
           <div><dt>Contrôleur<small>Arduino UNO Q</small></dt><dd><Dot tone={d.online ? "ok" : "crit"} />{d.online ? `En ligne · ${fmtDuration(d.uptimeS)}` : "Muet"}</dd></div>
         </dl>
       </Panel>

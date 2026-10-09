@@ -109,16 +109,16 @@ export default function Landing() {
             <span className="lp-kicker">02 · Le système</span>
             <h2>Une décoration en façade, un système complet derrière.</h2>
             <p className="lp-lead">
-              Une petite caméra et le laser sont cachés dans le nez sculpté. Derrière, l'Arduino UNO Q et la breadboard
-              reposent sur leur socle ; les câbles passent sous la citrouille jusqu'à la tête.
+              Caméra et laser dans le nez, lecteur RFID dans la tête, DHT22 sous la cape, d'où dépasse le dôme du détecteur
+              PIR. Derrière, l'Arduino UNO Q et la breadboard ; les câbles passent sous la citrouille.
             </p>
             <ol className="lp-parts">
               <li><b>ESP32-CAM · laser</b><span>cachés dans le nez</span></li>
               <li><b>Arduino UNO Q</b><span>contrôleur, Wi-Fi</span></li>
-              <li><b>Détecteur PIR</b><span>présence</span></li>
-              <li><b>DHT22</b><span>température, humidité</span></li>
+              <li><b>Détecteur PIR</b><span>présence, dépasse sous la cape</span></li>
+              <li><b>DHT22</b><span>température, humidité, sous la cape</span></li>
               <li><b>Capteur de capot</b><span>infrarouge</span></li>
-              <li><b>Lecteur RFID</b><span>armement du système</span></li>
+              <li><b>Lecteur RFID</b><span>dans la tête, armement</span></li>
             </ol>
             <p className="lp-fine">Modèle 3D simplifié.</p>
           </div>
@@ -137,7 +137,7 @@ export default function Landing() {
               <div>
                 <span className="lp-ico"><CreditCard size={20} /></span>
                 <h3>Badge RFID</h3>
-                <p>Le badge sert uniquement à armer ou désarmer le système. Seuls les badges enregistrés sont acceptés, et chaque passage est journalisé.</p>
+                <p>Le badge, présenté devant la citrouille (le lecteur est dans la tête), sert uniquement à armer ou désarmer le système. Seuls les badges enregistrés sont acceptés, et chaque passage est journalisé.</p>
               </div>
             </div>
           </div>
