@@ -2,7 +2,6 @@
 //   DHT11 ou DHT22 (temp./humidité) : données sur D2, + sur 3V3, - sur GND (modèle détecté auto)
 //   PIR HC-SR501 (mouvement)       : OUT sur D7, VCC sur 5V, GND sur GND
 //   Servo SG90 (rotation caméra)   : signal (orange) sur D9, rouge sur 5V, marron sur GND
-//   Porte (HW-201 infrarouge)      : OUT sur D4, VCC sur 3V3, GND sur GND
 //   Badge RFID (RC522, SPI)        : SDA D10, SCK D13, MOSI D11, MISO D12, RST D6, 3.3V sur 3V3 (jamais 5 V)
 //   Verrou (sortie)                : D3, à l'état haut quand le système est armé
 //   Haut-parleur (module MOS IRF520): SIG sur D5 ; VIN 5V, haut-parleur sur V+ / V-
@@ -19,7 +18,6 @@
 #define DHT_PIN   2
 #define PIR_PIN   7
 #define SERVO_PIN 9
-#define DOOR_PIN  4  // HW-201 : OUT à 0 V quand il voit la porte (fermée), 3,3 V sinon
 #define OLED_CONTRAST 60  // écran : luminosité sur 255, moins de courant et toujours lisible en intérieur
 #define MOTOR_PIN 8   // relais 1 (IN1) : tête de la citrouille vers la gauche ; relais actif à l'état bas
 #define MOTOR2_PIN A2 // relais 2 (IN2) : tête vers la droite. Pont en H : moteur sur les COM, + piles sur NO, − sur NC
@@ -244,12 +242,7 @@ static void oledDrawIdle() {
   oled.setDrawColor(1);
 
   oled.setFont(u8g2_font_helvB14_tr);
-  if (get_lid()) {  // trop long pour la grande police : 128 px de large
-    oled.setFont(u8g2_font_helvB10_tr);
-    drawCentered(34, "PORTE OUVERTE");
-  } else {
-    drawCentered(36, "R.A.S.");
-  }
+  drawCentered(36, "R.A.S.");
 
   oled.setFont(u8g2_font_6x10_tr);
   if (pirSeen) {
@@ -367,13 +360,6 @@ int   i2c_scan() {
   return 0;
 }
 int   get_pir()         { return pirState; }
-// --- Porte du pot : -1 = capteur réel, 0 / 1 = valeur d'exemple imposée (fermée / ouverte) pour tester
-volatile int doorSim = -1;
-int doorOpen = 0;
-int   get_lid()         { return doorSim >= 0 ? doorSim : doorOpen; }
-int   get_lid_source()  { return doorSim >= 0 ? 1 : 0; }  // 0 = capteur, 1 = simulation
-int   set_lid_sim(int v) { doorSim = (v == 0 || v == 1) ? v : -1; return get_lid(); }
-
 // --- Badge RFID : le MCU ne fait que lire l'UID ; la décision (badge autorisé, armement) vient du backend.
 MFRC522 rfid(RFID_SS, RFID_RST);
 volatile unsigned long rfidSeq = 0;  // incrémenté à chaque lecture : le Linux repère les nouveaux passages
@@ -472,7 +458,6 @@ void setup() {
   pinMode(MOTOR_PIN, OUTPUT);
   pinMode(MOTOR2_PIN, OUTPUT);
   pinMode(PIR_PIN, INPUT_PULLDOWN);  // évite les parasites si le fil est débranché
-  pinMode(DOOR_PIN, INPUT_PULLUP);   // capteur absent = pas d'obstacle = porte ouverte
   pinMode(LOCK_PIN, OUTPUT);
   pinMode(SPEAKER_PIN, OUTPUT);
   digitalWrite(SPEAKER_PIN, LOW);
@@ -492,9 +477,6 @@ void setup() {
   Bridge.provide("get_oled", get_oled);
   Bridge.provide_safe("i2c_scan", i2c_scan);
   Bridge.provide("get_pir", get_pir);
-  Bridge.provide("get_lid", get_lid);
-  Bridge.provide("get_lid_source", get_lid_source);
-  Bridge.provide("set_lid_sim", set_lid_sim);
   Bridge.provide("get_rfid_seq", get_rfid_seq);
   Bridge.provide_safe("get_rfid_uid", get_rfid_uid);
   Bridge.provide("get_armed", get_armed);
@@ -557,13 +539,6 @@ void loop() {
     }
     rfid.PCD_AntennaOff();
   }
-
-  // Porte : état stable 100 ms avant d'être pris en compte
-  static int doorRaw = 0;
-  static unsigned long doorRawSince = 0;
-  int dr = digitalRead(DOOR_PIN) == HIGH;  // HIGH = aucun reflet = porte ouverte
-  if (dr != doorRaw) { doorRaw = dr; doorRawSince = millis(); }
-  if (millis() - doorRawSince >= 100) doorOpen = doorRaw;
 
   // PIR : anti-rebond de 50 ms sur le signal brut, puis maintien pirHoldMs après le dernier HIGH
   static int pirRaw = 0, pirStable = 0;

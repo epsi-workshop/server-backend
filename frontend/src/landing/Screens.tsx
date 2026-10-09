@@ -89,7 +89,6 @@ export function LaptopScreen() {
           <div className="scr-card"><small>Humidité</small><b>47,8<em>%</em></b><Spark d={HUM} /></div>
           <div className="scr-card"><small>Présence (PIR)</small><span className="scr-state"><i className="dot ok" />Aucun mouvement</span><span className="scr-meta">Dernier déclenchement · 14 min</span></div>
           <div className="scr-card"><small>Armement (RFID)</small><span className="scr-state"><i className="dot ok" />Système armé</span><span className="scr-meta">Badge de Camille D. · il y a 2 min</span></div>
-          <div className="scr-card"><small>Capot</small><span className="scr-state"><i className="dot ok" />Capot fermé</span><span className="scr-meta">Capteur infrarouge</span></div>
           <div className="scr-card"><small>Caméra</small><span className="scr-state"><i className="dot ok" />Flux verrouillé</span><span className="scr-meta">S'ouvre à la détection</span></div>
         </div>
         <div className="scr-row">
@@ -104,7 +103,7 @@ export function LaptopScreen() {
             <small>Dernières alertes</small>
             <ul className="scr-list">
               <li><span className="lvl crit">Critique</span>Visage inconnu<em>02:14</em></li>
-              <li><span className="lvl warn">Alerte</span>Capot ouvert<em>02:13</em></li>
+              <li><span className="lvl warn">Alerte</span>Badge refusé<em>02:13</em></li>
               <li><span className="lvl">Info</span>Badge · système désarmé<em>08:02</em></li>
               <li><span className="lvl">Info</span>Système armé<em>08:03</em></li>
             </ul>

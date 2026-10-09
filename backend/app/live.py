@@ -12,7 +12,7 @@ from .config import config
 from .db import SessionLocal, SettingsRow, measurements
 from .hub import hub
 from .schemas import (
-    DEFAULT_SETTINGS, Anomaly, Camera, Device, Distance, Imu, Lid, Pir, Reading, Rfid, Sensors, Settings,
+    DEFAULT_SETTINGS, Anomaly, Camera, Device, Distance, Imu, Pir, Reading, Rfid, Sensors, Settings,
     SystemState, Threat, dump,
 )
 from .util import utcnow
@@ -31,7 +31,6 @@ def default_state(now: datetime) -> SystemState:
             pir=Pir(active=False, last_triggered=None, count_last_hour=0),
             distance=Distance(cm=0, ts=now),
             imu=Imu(accel_g=1.0, tilt_deg=0, shock=False, last_shock=None),
-            lid=Lid(open=False, last_change=None),
             rfid=Rfid(last_uid=None, last_name=None, accepted=None, ts=None),
         ),
         camera=Camera(online=False, detection_active=False, last_detection=None, override_until=None, masked=False),

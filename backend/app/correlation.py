@@ -22,7 +22,7 @@ from .mqtt import CommandError, send_command
 from .schemas import Settings, SystemState, Threat, ThreatLevel, dump
 from .util import utcnow
 
-Signal = Literal["pir", "proximite", "anomalie", "vision", "choc", "muet", "capot", "badge_refuse"]
+Signal = Literal["pir", "proximite", "anomalie", "vision", "choc", "muet", "badge_refuse"]
 
 WINDOW = timedelta(seconds=60)  # chaque type de signal compte une fois sur cette fenêtre
 ESCALATE = timedelta(seconds=90)  # une alerte ouverte plus récente est mise à jour au lieu d'être dupliquée
@@ -36,14 +36,13 @@ LABELS: dict[Signal, str] = {
     "vision": "Mouvement détecté par la caméra",
     "choc": "Choc ou déplacement du boîtier",
     "muet": "Boîtier muet",
-    "capot": "Capot ouvert",
     "badge_refuse": "Badge refusé",
 }
 
 # Titre de l'alerte selon le signal le plus prioritaire présent.
 TITLES: list[tuple[set[Signal], str, int]] = [
     ({"vision"}, "Intrusion détectée", 6),
-    ({"capot", "choc"}, "Sabotage du boîtier", 5),
+    ({"choc"}, "Sabotage du boîtier", 5),
     ({"pir", "proximite"}, "Présence détectée", 4),
     ({"muet"}, "Boîtier muet", 3),
     ({"badge_refuse"}, "Badge refusé", 2),
@@ -143,8 +142,6 @@ class Correlator:
     def active_kinds(self, state: SystemState, now: datetime) -> set[Signal]:
         self.signals = [(k, t) for k, t in self.signals if now - t < WINDOW]
         kinds: set[Signal] = {k for k, _ in self.signals}
-        if state.sensors.lid.open:
-            kinds.add("capot")
         # Boîtier muet seulement s'il a déjà donné signe de vie (pas de fausse alerte avant le premier heartbeat).
         if not state.device.online and state.device.last_heartbeat is not None:
             kinds.add("muet")

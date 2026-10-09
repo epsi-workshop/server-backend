@@ -23,7 +23,6 @@ export default function Overview() {
         <p className="pot-caption">Modèle 3D du boîtier · état en direct</p>
         <dl className="facts pot-legend">
           <div><dt>Caméra<small>ESP32-CAM et laser, dans le nez</small></dt><dd><Dot tone={!c.online ? "crit" : camOpen ? "warn" : "ok"} />{!c.online ? "Hors ligne" : camOpen ? "En direct" : "En veille"}</dd></div>
-          <div><dt>Capot<small>ouverture du boîtier, capteur infrarouge</small></dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouvert" : "Fermé"}</dd></div>
           <div><dt>Détecteur de présence<small>PIR, sous la cape</small></dt><dd><Dot tone={s.pir.active ? "warn" : "ok"} />{s.pir.active ? "Mouvement" : "Calme"}</dd></div>
           <div><dt>Température · humidité<small>DHT22, sous la cape</small></dt><dd>{fmtNum(s.temperature.value)} °C · {fmtNum(s.humidity.value, 0)} %</dd></div>
           <div><dt>Armement<small>lecteur RFID dans la tête</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armé" : "Désarmé"}</dd></div>
@@ -78,17 +77,6 @@ export default function Overview() {
         <dl className="facts">
           <div><dt>Dernier déclenchement</dt><dd>{ago(s.pir.lastTriggered)}</dd></div>
           <div><dt>Sur la dernière heure</dt><dd>{s.pir.countLastHour}</dd></div>
-        </dl>
-      </Panel>
-
-      <Panel title="Capot du boîtier" className="span-4" icon="integrity" tone={s.lid.open ? "crit" : undefined}>
-        <div className="big-state">
-          <Dot tone={s.lid.open ? "crit" : "ok"} />
-          <strong>{s.lid.open ? "Capot ouvert" : "Capot fermé"}</strong>
-        </div>
-        <dl className="facts">
-          <div><dt>Capteur</dt><dd>infrarouge</dd></div>
-          <div><dt>Dernier changement</dt><dd>{ago(s.lid.lastChange)}</dd></div>
         </dl>
       </Panel>
 

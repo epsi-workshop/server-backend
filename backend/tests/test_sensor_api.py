@@ -55,23 +55,6 @@ def test_malformed_response_ignored(sent: list[tuple[str, dict[str, Any]]]) -> N
     assert sent == []
 
 
-def test_door_state_translated_on_change(sent: list[tuple[str, dict[str, Any]]]) -> None:
-    """Valeurs d'exemple : porte fermée, ouverte deux fois de suite (une seule transmission), refermée."""
-    api = sensor_api.SensorApi("http://x")
-
-    async def scenario() -> None:
-        for is_open in (False, True, True, False):
-            await api._apply_sensors({"lid": {"open": is_open, "source": "simulation"}})
-
-    run(scenario())
-    assert sent == [("lid_open", {"state": 0}), ("lid_open", {"state": 1}), ("lid_open", {"state": 0})]
-
-
-def test_door_absent_or_malformed_ignored(sent: list[tuple[str, dict[str, Any]]]) -> None:
-    run(sensor_api.SensorApi("http://x")._apply_sensors({"lid": {"open": "oui"}}))
-    run(sensor_api.SensorApi("http://x")._apply_sensors({"lid": None}))
-    assert sent == []
-
 
 def test_badge_passes_translated(sent: list[tuple[str, dict[str, Any]]]) -> None:
     """Valeurs d'exemple : référence au démarrage (pas rejouée), deux passages, relecture identique ignorée."""

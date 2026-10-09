@@ -26,7 +26,7 @@ def test_system_state_keys() -> None:
 
 def test_settings_roundtrip_from_dashboard_json() -> None:
     sent = {
-        "weights": {"pir": 20, "proximite": 20, "anomalie": 30, "vision": 40, "choc": 40, "muet": 50, "capot": 60,
+        "weights": {"pir": 20, "proximite": 20, "anomalie": 30, "vision": 40, "choc": 40, "muet": 50,
                     "badgeRefuse": 30},
         "thresholds": {"alerte": 30, "critique": 70},
         "armedMultiplier": 1.5,

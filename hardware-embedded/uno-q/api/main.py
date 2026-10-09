@@ -66,22 +66,6 @@ def pir_hold():
     return {"hold_s": ms / 1000}
 
 
-def lid_data():
-    state, source = read_int("get_lid"), read_int("get_lid_source")
-    return {
-        "open": None if state is None else bool(state),
-        "source": None if source is None else ("simulation" if source else "capteur"),
-    }
-
-
-@app.get("/sensors/lid")
-def lid():
-    """Porte du pot (capteur infrarouge HW-201 sur D4) ; source = capteur ou simulation."""
-    return lid_data()
-
-
-LID_SIM = {"open": 1, "closed": 0, "off": -1}
-
 # Passages de badge : numérotés ici pour fusionner le lecteur RC522 et les badges simulés.
 # Le backend repère un nouveau passage quand seq augmente.
 _rfid_lock = threading.Lock()
@@ -134,23 +118,12 @@ def system_armed(state: str = Path(..., pattern="^(on|off)$", description="on = 
     return system()
 
 
-@app.post("/sensors/lid/simulate/{state}")
-def lid_simulate(state: str = Path(..., pattern="^(open|closed|off)$", description="open, closed, ou off pour revenir au capteur")):
-    """Impose une valeur d'exemple (open / closed) pour tester sans capteur ; off revient au capteur réel."""
-    try:
-        call("set_lid_sim", LID_SIM[state])
-    except (BridgeError, OSError) as e:
-        raise HTTPException(503, f"microcontrôleur injoignable via le Bridge : {e}")
-    return lid_data()
-
-
 @app.get("/sensors")
 def sensors():
     return {
         "temperature_c": read_float("get_temperature"),
         "humidity_pct": read_float("get_humidity"),
         "pir": pir_data(),
-        "lid": lid_data(),
         "rfid": rfid_data(),
         "armed": None if (a := read_int("get_armed")) is None else bool(a),
         "motion": None,

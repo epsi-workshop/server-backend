@@ -81,11 +81,6 @@ class Imu(Camel):
     last_shock: Ts | None
 
 
-class Lid(Camel):
-    open: bool
-    last_change: Ts | None
-
-
 class Rfid(Camel):
     last_uid: str | None
     last_name: str | None
@@ -99,7 +94,6 @@ class Sensors(Camel):
     pir: Pir
     distance: Distance
     imu: Imu
-    lid: Lid
     rfid: Rfid
 
 
@@ -202,7 +196,6 @@ class Weights(Camel):
     vision: Weight
     choc: Weight
     muet: Weight
-    capot: Weight
     badge_refuse: Weight
 
 
@@ -227,7 +220,7 @@ class Settings(Camel):
 
 
 DEFAULT_SETTINGS = Settings(
-    weights=Weights(pir=20, proximite=20, anomalie=30, vision=40, choc=40, muet=50, capot=60, badge_refuse=30),
+    weights=Weights(pir=20, proximite=20, anomalie=30, vision=40, choc=40, muet=50, badge_refuse=30),
     thresholds=Thresholds(alerte=30, critique=70),
     armed_multiplier=1.5,
     occupancy=Occupancy(start="08:00", end="19:00", days=[1, 2, 3, 4, 5]),

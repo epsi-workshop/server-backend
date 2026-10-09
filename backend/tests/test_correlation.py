@@ -46,7 +46,7 @@ def test_valid_badge_lowers_score() -> None:
 
 
 def test_title_priority() -> None:
-    assert title_for({"badge_refuse", "vision", "capot"})[0] == "Intrusion détectée"
+    assert title_for({"badge_refuse", "vision", "choc"})[0] == "Intrusion détectée"
     assert title_for({"choc", "pir"})[0] == "Sabotage du boîtier"
     assert title_for({"anomalie"})[0] == "Anomalie environnementale"
 

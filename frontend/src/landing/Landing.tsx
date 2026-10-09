@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type MutableRefObject, type ReactNode } from "react";
 import { Canvas } from "@react-three/fiber";
 import { useProgress } from "@react-three/drei";
-import { ArrowDown, ArrowRight, BellRing, DoorOpen, Eye, Pause, Play, ScanFace, Smartphone, Thermometer, VideoOff, CreditCard } from "lucide-react";
+import { ArrowDown, ArrowRight, BellRing, Eye, Pause, Play, ScanFace, Smartphone, Thermometer, VideoOff, CreditCard } from "lucide-react";
 import { Stage } from "./Stage";
 import { buildStops, type Stop } from "./timeline";
 
@@ -96,7 +96,6 @@ export default function Landing() {
             <p className="lp-lead">Sur une étagère de la salle serveur, il passe pour une simple décoration. Il détecte, score la menace et alerte.</p>
             <ul className="lp-features">
               <Feature icon={<Eye size={18} />} title="Intrusion">Présence devant la baie, personne détectée par la caméra, mouvement hors horaires.</Feature>
-              <Feature icon={<DoorOpen size={18} />} title="Manipulation">Ouverture du capot du boîtier, détectée par un capteur infrarouge.</Feature>
               <Feature icon={<Thermometer size={18} />} title="Environnement">Température et humidité hors plage, projection à 15 minutes.</Feature>
               <Feature icon={<VideoOff size={18} />} title="Sabotage">Objectif masqué, boîtier muet ou déconnecté.</Feature>
             </ul>
@@ -117,7 +116,6 @@ export default function Landing() {
               <li><b>Arduino UNO Q</b><span>contrôleur, Wi-Fi</span></li>
               <li><b>Détecteur PIR</b><span>présence, dépasse sous la cape</span></li>
               <li><b>DHT22</b><span>température, humidité, sous la cape</span></li>
-              <li><b>Capteur de capot</b><span>infrarouge</span></li>
               <li><b>Lecteur RFID</b><span>dans la tête, armement</span></li>
             </ol>
             <p className="lp-fine">Modèle 3D simplifié.</p>

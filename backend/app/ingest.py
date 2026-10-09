@@ -273,12 +273,6 @@ async def box_event(env: Envelope, source: str) -> None:
                     await write_log("info", "boitier", "Mouvement détecté (PIR)")
                 s.pir.active = active
                 s.pir.count_last_hour = count_recent(pir_events, utcnow(), timedelta(hours=1))
-            case "lid_open":
-                is_open = StateData.model_validate(env.data).state == 1
-                if is_open != s.lid.open:
-                    s.lid.open, s.lid.last_change = is_open, env.ts
-                    await write_log("critical" if is_open else "info", "boitier",
-                                    "Capot du boîtier ouvert" if is_open else "Capot du boîtier refermé")
             case "imu_shock":
                 shock = ShockData.model_validate(env.data)
                 s.imu.shock, s.imu.last_shock = True, env.ts

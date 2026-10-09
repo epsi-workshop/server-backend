@@ -39,7 +39,7 @@ const badges: Badge[] = [
 ];
 
 let settings: Settings = {
-  weights: { pir: 20, proximite: 20, anomalie: 30, vision: 40, choc: 40, muet: 50, capot: 60, badgeRefuse: 30 },
+  weights: { pir: 20, proximite: 20, anomalie: 30, vision: 40, choc: 40, muet: 50, badgeRefuse: 30 },
   thresholds: { alerte: 30, critique: 70 },
   armedMultiplier: 1.5,
   occupancy: { start: "08:00", end: "19:00", days: [1, 2, 3, 4, 5] },
@@ -88,7 +88,6 @@ const state: SystemState = {
     pir: { active: false, lastTriggered: iso(now0 - 47 * MIN), countLastHour: 2 },
     distance: { cm: 192, ts: iso() },
     imu: { accelG: 1.0, tiltDeg: 0.4, shock: false, lastShock: null },
-    lid: { open: false, lastChange: iso(now0 - 3 * DAY) },
     rfid: { lastUid: "04:A3:1F:6B", lastName: "Équipe infra", accepted: true, ts: iso(now0 - 3 * HOUR) },
   },
   camera: { online: true, detectionActive: false, lastDetection: null, overrideUntil: null, masked: false },
@@ -174,7 +173,7 @@ type Signal = keyof Settings["weights"];
 const SIGNAL_LABEL: Record<Signal, string> = {
   pir: "Mouvement PIR", proximite: "Objet à moins de 50 cm", anomalie: "Anomalie environnementale",
   vision: "Personne confirmée par la caméra", choc: "Choc ou déplacement du boîtier", muet: "Boîtier muet",
-  capot: "Capot ouvert", badgeRefuse: "Badge refusé",
+  badgeRefuse: "Badge refusé",
 };
 let signals: { kind: Signal; ts: number }[] = [];
 const addSignal = (kind: Signal) => signals.push({ kind, ts: Date.now() });
@@ -198,7 +197,6 @@ function computeThreat() {
   const t = Date.now();
   signals = signals.filter((s) => t - s.ts < 60_000);
   const kinds = new Set<Signal>(signals.map((s) => s.kind));
-  if (state.sensors.lid.open) kinds.add("capot");
   if (!state.device.online) kinds.add("muet");
   if (state.anomaly.isAnomaly) kinds.add("anomalie");
   let base = 0;
@@ -225,7 +223,7 @@ function computeThreat() {
 const LEVEL_RANK: Record<ThreatLevel, number> = { info: 0, alerte: 1, critique: 2 };
 const TITLES: [Signal[], string, number][] = [
   [["vision"], "Intrusion détectée", 6],
-  [["capot", "choc"], "Sabotage du boîtier", 5],
+  [["choc"], "Sabotage du boîtier", 5],
   [["pir", "proximite"], "Présence détectée", 4],
   [["muet"], "Boîtier muet", 3],
   [["badgeRefuse"], "Badge refusé", 2],
@@ -336,15 +334,7 @@ function runScenario() {
         addSignal("choc");
         log("critical", "boitier", "Choc détecté sur le boîtier (2,4 g, inclinaison 14°)");
       }
-      if (s.step === 1) {
-        sen.lid = { open: true, lastChange: iso() };
-        log("critical", "boitier", "Capot du boîtier ouvert");
-      }
       if (s.step === 2) sen.imu = { ...sen.imu, accelG: 1.0, tiltDeg: 1.2, shock: false };
-      if (s.step === 5) {
-        sen.lid = { open: false, lastChange: iso() };
-        log("info", "boitier", "Capot du boîtier refermé");
-      }
       if (s.step >= 7) scenario = null;
       break;
     }

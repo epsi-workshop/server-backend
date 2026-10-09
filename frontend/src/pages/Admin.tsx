@@ -553,7 +553,7 @@ function BadgesTab() {
 // Ultrasons (proximite) et accéléromètre (choc) ne sont plus montés : leurs poids restent en base, sans réglage.
 const WEIGHT_LABEL: Partial<Record<keyof Settings["weights"], string>> = {
   pir: "Mouvement PIR", vision: "Mouvement détecté par la caméra",
-  capot: "Capot ouvert", muet: "Boîtier muet",
+  muet: "Boîtier muet",
   anomalie: "Anomalie environnementale", badgeRefuse: "Badge refusé",
 };
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];

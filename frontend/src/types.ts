@@ -39,7 +39,6 @@ export interface SystemState {
     pir: { active: boolean; lastTriggered: string | null; countLastHour: number };
     distance: { cm: number; ts: string };
     imu: { accelG: number; tiltDeg: number; shock: boolean; lastShock: string | null };
-    lid: { open: boolean; lastChange: string | null };
     rfid: { lastUid: string | null; lastName: string | null; accepted: boolean | null; ts: string | null };
   };
   camera: {
@@ -159,7 +158,7 @@ export interface Badge {
 
 export interface Settings {
   weights: Record<
-    "pir" | "proximite" | "anomalie" | "vision" | "choc" | "muet" | "capot" | "badgeRefuse",
+    "pir" | "proximite" | "anomalie" | "vision" | "choc" | "muet" | "badgeRefuse",
     number
   >;
   thresholds: { alerte: number; critique: number };

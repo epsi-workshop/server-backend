@@ -2,7 +2,7 @@
 
 Adresse de base : SENSOR_API_URL (http://talos.local:8000), à laquelle on ajoute les routes :
   GET /health  -> {"status": "ok", "uptime_s": 429}                         heartbeat (boîtier en ligne)
-  GET /sensors -> {"temperature_c", "humidity_pct", "pir": {"motion", …}, "lid": {"open", …}}   télémesure, PIR, porte
+  GET /sensors -> {"temperature_c", "humidity_pct", "pir": {"motion", …}}   télémesure, PIR
   WS  /ws/pir  -> {"event": "motion_start", "motion": true, …}             PIR en temps réel
 
 Chaque réponse est traduite en message du contrat (Envelope) et traitée par les mêmes fonctions que
@@ -59,7 +59,6 @@ class SensorApi:
     def __init__(self, base_url: str) -> None:
         self.base_url = base_url.rstrip("/")
         self.motion: bool | None = None  # dernier état du PIR transmis
-        self.lid_open: bool | None = None  # dernier état de la porte du pot transmis
         self.rfid_seq: int | None = None  # numéro du dernier passage de badge vu (None = pas encore de référence)
         self.http_ok: bool | None = None
         self.ws_ok: bool | None = None
@@ -75,13 +74,6 @@ class SensorApi:
             return
         self.motion = motion
         await box_event(self._envelope("pir", {"state": int(motion)}), SOURCE)
-
-    async def _set_lid(self, is_open: bool) -> None:
-        """Porte du pot (capteur infrarouge HW-201) : seuls les changements sont transmis."""
-        if is_open == self.lid_open:
-            return
-        self.lid_open = is_open
-        await box_event(self._envelope("lid_open", {"state": int(is_open)}), SOURCE)
 
     async def _set_rfid(self, seq: int, uid: str) -> None:
         """Nouveau passage de badge (seq a changé) : l'UID est transmis, le backend décide (table badges).
@@ -152,9 +144,6 @@ class SensorApi:
         # Armement : l'UNO Q redémarre « désarmée » ; on lui renvoie l'état du dashboard s'il diffère.
         if isinstance(s.get("armed"), bool) and s["armed"] != live.state.device.armed:
             await self.push_armed(live.state.device.armed)
-        lid = s.get("lid")
-        if isinstance(lid, dict) and isinstance(lid.get("open"), bool):
-            await self._set_lid(lid["open"])
 
     async def _http_state(self, ok: bool, error: str = "") -> None:
         """Journalise seulement les changements (pas un message toutes les 5 s pendant une panne)."""
