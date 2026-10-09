@@ -6,6 +6,7 @@ l'API capteurs de l'UNO Q s'y inscrit pour mettre à jour l'écran et la sortie 
 import logging
 from collections.abc import Awaitable, Callable
 
+from . import sound
 from .live import live
 
 log = logging.getLogger(__name__)
@@ -18,6 +19,8 @@ async def apply_armed(armed: bool) -> None:
     """Met à jour l'état, le diffuse au dashboard, puis le pousse aux boîtiers (une panne n'empêche rien)."""
     live.state.device.armed = armed
     live.publish()
+    if not armed and sound.alarm_active():
+        sound.stop()  # désarmé (dashboard ou badge) : plus d'alarme
     for hook in hooks:
         try:
             await hook(armed)

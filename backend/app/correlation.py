@@ -12,7 +12,6 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 
-from . import sound
 from .config import config
 from .convert import to_alert
 from .db import AlertRow, SessionLocal
@@ -203,10 +202,6 @@ class Correlator:
         elif plan.raise_level or plan.better_title:
             await write_log("critical" if threat.level == "critique" else "warn", "backend",
                             f"Alerte escaladée : {alert.title} (score {alert.score})")
-        if (plan.create or plan.raise_level) and threat.level == "critique":
-            # Niveau 3 : message parlé et sirène sur la sortie choisie (enceinte et/ou haut-parleur du boîtier).
-            sound.alarm()
-            await write_log("warn", "backend", f"Alarme sonore déclenchée ({sound.ALARM_SECONDS} s)")
         if (plan.create or plan.raise_level) and threat.level == "critique" and live.state.device.armed:
             try:
                 if await send_command("buzzer_on"):

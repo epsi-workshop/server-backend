@@ -468,13 +468,11 @@ def audio_volume(pct: int = Path(..., ge=0, le=100)):
 @app.post("/display/face")
 def display_face(msg: DisplayFace):
     """Résultat de la reconnaissance faciale (service vision), affiché par-dessus l'écran de surveillance."""
-    bluetooth = apply_speaker()  # le sketch joue lui-même le son filaire, s'il est autorisé
+    # Affichage seulement : les sons (« Bonjour <prénom> », alarme intrusion si armé) viennent du backend.
     try:
         call("show_face", FACE_KINDS[msg.kind], msg.name.upper(), msg.seconds)
     except (BridgeError, OSError) as e:
         raise HTTPException(503, f"microcontrôleur injoignable via le Bridge : {e}")
-    if bluetooth:
-        audio.player.play("hello", name=msg.name) if msg.kind == "known" else audio.player.play("unknown")
     return {"kind": msg.kind, "name": msg.name.upper(), "seconds": msg.seconds}
 
 

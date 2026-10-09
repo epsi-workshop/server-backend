@@ -1,16 +1,21 @@
-"""Sons du boîtier déclenchés par le backend : alarme du niveau critique, arrêt, préparation des voix.
+"""Sons du boîtier déclenchés par le backend : alarme intrusion, « Bonjour <prénom> », arrêt, voix.
+
+Règles (ingest.py, arming.py) : l'alarme ne part que pour un visage inconnu pendant que le système est
+armé ; elle s'arrête sur un visage reconnu, un badge valide, le désarmement ou l'acquittement.
 
 La sortie (haut-parleur du boîtier, enceinte Bluetooth, les deux) est choisie sur l'UNO Q : le backend
 ne fait qu'envoyer l'événement. L'API capteurs s'inscrit dans `senders` (sensor_api.py).
 """
 import asyncio
 import logging
+import time
 from collections.abc import Awaitable, Callable
 from typing import Any
 
 log = logging.getLogger(__name__)
 
-ALARM_SECONDS = 30
+ALARM_SECONDS = 120  # durée maximale de la sirène sur la carte ; arrêtée avant par les règles ci-dessus
+_alarm_until = 0.0
 # Envoi d'une requête POST au boîtier : (route, paramètres, corps JSON)
 Sender = Callable[[str, dict[str, Any] | None, dict[str, Any] | None], Awaitable[None]]
 senders: list[Sender] = []
@@ -33,12 +38,25 @@ def _background(path: str, params: dict[str, Any] | None = None, body: dict[str,
 
 
 def alarm(seconds: int = ALARM_SECONDS) -> None:
-    """Niveau critique : « Alerte. Intrusion détectée. » puis sirène."""
+    """Intrusion : « Alerte. Intrusion détectée. » puis sirène."""
+    global _alarm_until
+    _alarm_until = time.monotonic() + seconds
     _background("/sound/alarm", {"seconds": seconds})
 
 
+def alarm_active() -> bool:
+    return time.monotonic() < _alarm_until
+
+
 def stop() -> None:
+    global _alarm_until
+    _alarm_until = 0.0
     _background("/sound/stop")
+
+
+def hello(name: str) -> None:
+    """Visage reconnu : carillon et « Bonjour <prénom> » sur la sortie choisie."""
+    _background("/sound/hello", {"name": name})
 
 
 def prepare_voice(*texts: str) -> None:

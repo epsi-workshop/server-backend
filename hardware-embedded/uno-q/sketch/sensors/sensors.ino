@@ -425,8 +425,7 @@ int show_face(int kind, String name, int seconds) {
   strncpy(faceName, name.c_str(), sizeof(faceName) - 1);
   faceName[sizeof(faceName) - 1] = 0;
   faceUntil = millis() + (unsigned long)constrain(seconds, 1, 30) * 1000;
-  if (faceKind == 1 && soundPattern != 4) play_sound(3, 0);
-  else if (faceKind == 2) play_sound(4, 10);  // intrus : sirène 10 s
+  // Pas de son ici : le backend décide (alarme seulement si le système est armé, « Bonjour » sinon).
   return faceKind;
 }
 

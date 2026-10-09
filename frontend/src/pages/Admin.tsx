@@ -377,7 +377,7 @@ function SoundTab() {
                 <button className="btn btn-danger" onClick={() => run("stop", () => api.stopSound(), "Son coupé")}><VolumeX size={15} />Couper</button>
               </div>
             )}
-            <p className="muted small">Sons automatiques : bip à chaque badge, « Bonjour + prénom » pour un visage reconnu, « Inconnu détecté » pour un visage inconnu, voix et sirène 30 s au niveau d'alerte critique (coupée à l'acquittement).</p>
+            <p className="muted small">Sons automatiques : bip à chaque badge, « Bonjour + prénom » pour un visage reconnu. Alarme (voix « Intrusion détectée » + sirène) uniquement pour un visage inconnu quand le système est armé ; elle s'arrête sur un visage reconnu, un badge valide, le désarmement ou l'acquittement de l'alerte.</p>
           </>
         )}
       </Panel>

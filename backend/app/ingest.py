@@ -15,7 +15,7 @@ from pydantic import AwareDatetime, BaseModel, Field, ValidationError
 from sqlalchemy import select
 
 from .arming import apply_armed
-from . import badges
+from . import badges, sound
 from .config import config
 from .correlation import correlator
 from .db import BadgeRow, SessionLocal, TeamMemberRow, events, measurements
@@ -198,13 +198,21 @@ async def on_face(env: Envelope) -> None:
     live.refresh()
     await _store_event(env, {**data.model_dump(mode="json"), "name": member.name if member else None})
     if known:
-        # Membre reconnu : même effet qu'un badge valide (score de menace atténué).
+        # Membre reconnu : même effet qu'un badge valide (score de menace atténué), et fin de l'alarme.
         correlator.valid_badge_at = env.ts
+        if sound.alarm_active():
+            sound.stop()
+            await write_log("info", "vision", f"Alarme arrêtée : {member.name} reconnu")  # type: ignore[union-attr]
+        sound.hello(member.name)  # type: ignore[union-attr]
         await write_log("info", "vision", f"Visage reconnu : bonjour {member.name}")  # type: ignore[union-attr]
     else:
         correlator.signal("vision", env.ts, data.snapshot)
         await write_log("critical", "vision", "Intrus détecté : visage inconnu"
                         + (f", capture {data.snapshot}" if data.snapshot else ""))
+        # Seul cas où l'alarme sonne : un intrus pendant que le système est armé.
+        if live.state.device.armed and not sound.alarm_active():
+            sound.alarm()
+            await write_log("critical", "vision", "Alarme intrusion déclenchée")
     await _update()
 
 
@@ -316,6 +324,9 @@ async def _on_badge(env: Envelope, uid: str) -> None:
     if accepted:
         correlator.valid_badge_at = env.ts
         await write_log("info", "boitier", f"Badge accepté : {badge.owner} ({uid})")  # type: ignore[union-attr]
+        if sound.alarm_active():
+            sound.stop()
+            await write_log("info", "boitier", f"Alarme arrêtée par badge ({badge.owner})")  # type: ignore[union-attr]
         # Badge à deux états : un passage arme et verrouille, le suivant désarme et déverrouille.
         armed = not live.state.device.armed
         await apply_armed(armed)
