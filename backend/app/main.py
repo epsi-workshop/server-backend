@@ -15,7 +15,7 @@ from .journal import write_log
 from .live import live
 from .mqtt import bus
 from .sensor_api import sensor_api
-from .routers import admin, auth, control, monitoring, ws
+from .routers import admin, auth, control, monitoring, ws, audio
 
 
 @asynccontextmanager
@@ -56,8 +56,7 @@ UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 async def check_origin(request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
     """Anti-CSRF (en plus de SameSite=Strict) : les requêtes modifiantes doivent venir du dashboard."""
     if request.method in UNSAFE_METHODS:
-        origin = (request.headers.get("origin") or "").rstrip("/")
-        if origin not in config.origins:
+        if not config.origin_allowed(request.headers.get("origin") or "", request.headers.get("host")):
             return JSONResponse(status_code=403, content={"detail": "Origine de la requête refusée."})
     return await call_next(request)
 
@@ -76,5 +75,5 @@ async def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-for module in (auth, monitoring, control, admin, ws):
+for module in (auth, monitoring, control, admin, ws, audio):
     app.include_router(module.router)

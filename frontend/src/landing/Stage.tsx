@@ -1,15 +1,15 @@
-import { Suspense, useMemo, useRef, type MutableRefObject } from "react";
+import { useMemo, useRef, type MutableRefObject } from "react";
 import { useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, Html, MeshReflectorMaterial, RoundedBox, useGLTF } from "@react-three/drei";
+import { ContactShadows, Html, MeshReflectorMaterial, RoundedBox } from "@react-three/drei";
 import * as THREE from "three";
 import { StudioEnvironment } from "../three/Objects";
 import { MOTION, STATE_COLOR } from "../three/threat";
-import potOpenUrl from "../assets/pot-ouvert.glb?url";
+import { Pumpkin } from "../three/Pumpkin";
 import { RACK_X, SECTIONS, adaptToViewport, poseAt, type Pose, type Stop } from "./timeline";
 import { FaceScreen, LaptopScreen, PhoneScreen } from "./Screens";
 
 /**
- * Scène unique de la page de présentation : le pot, la baie de la salle serveur, le contrôle d'accès
+ * Scène unique de la page de présentation : la citrouille, la baie de la salle serveur, le contrôle d'accès
  * et les écrans de supervision. Tout est piloté par la pose courante, amortie à partir du défilement.
  */
 
@@ -36,7 +36,7 @@ export function Stage({ stops }: { stops: MutableRefObject<Stop[]> }) {
       <Rack live={live} x={RACK_X} />
       <Rack live={live} x={-4.1} z={-0.7} />
       <Room live={live} />
-      <Suspense fallback={null}><Pot live={live} /></Suspense>
+      <Box live={live} />
       <Access live={live} />
       <Devices live={live} />
     </>
@@ -69,71 +69,50 @@ function Rig({ stops, live }: { stops: MutableRefObject<Stop[]>; live: LiveRef }
   return null;
 }
 
-// ------------------------------------------------------------------------------------- pot
+// ------------------------------------------------------------------------------------- boîtier
 
-const POT_HEIGHT = 2;
-
-/** Modèle réel du boîtier, version « porte ouverte » : la charnière est un nœud que l'on fait pivoter. */
-function Pot({ live }: { live: LiveRef }) {
-  const { scene } = useGLTF(potOpenUrl, false);
-  const { model, hinge, open } = useMemo(() => {
-    const root = scene.clone(true);
-    const box = new THREE.Box3().setFromObject(root);
-    const size = box.getSize(new THREE.Vector3());
-    const k = POT_HEIGHT / size.y;
-    root.scale.setScalar(k);
-    const c = box.getCenter(new THREE.Vector3());
-    root.position.set(-c.x * k, -box.min.y * k, -c.z * k);
-    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
-    const h = root.getObjectByName("charniere") ?? null;
-    return { model: root, hinge: h, open: h ? h.quaternion.clone() : new THREE.Quaternion() };
-  }, [scene]);
-  const closed = useMemo(() => new THREE.Quaternion(), []);
+/** La citrouille et son module électronique : les repères des composants apparaissent sur le module. */
+function Box({ live }: { live: LiveRef }) {
   const group = useRef<THREE.Group>(null);
   const spin = useRef<THREE.Group>(null);
-  const glow = useRef<THREE.PointLight>(null);
   const tags = useRef<HTMLDivElement[]>([]);
+  const inside = useRef(0);
   useFrame(() => {
     const p = live.current.pose;
     if (group.current) {
-      group.current.position.set(...p.pot);
+      group.current.position.set(...p.box);
       group.current.scale.setScalar(p.scale);
     }
     if (spin.current) spin.current.rotation.y = live.current.rotY;
-    if (hinge) hinge.quaternion.slerpQuaternions(closed, open, p.door);
-    if (glow.current) glow.current.intensity = p.inside * 1.4;
+    inside.current = p.inside;
     const o = ramp(p.inside, 0.6, 0.95);
     tags.current.forEach((el) => { el.style.opacity = String(o); el.style.visibility = o > 0.01 ? "visible" : "hidden"; });
   });
   return (
     <group ref={group}>
-      <group ref={spin}><primitive object={model} /></group>
-      <pointLight ref={glow} position={[0, 0.7, 0.3]} intensity={0} distance={2.4} color="#ffdcb0" />
-      <ContactShadows position={[0, 0.006, 0]} opacity={0.55} scale={3} blur={2.4} far={1.6} />
-      {HOTSPOTS.map((h, i) => (
-        <Html key={h.label} position={h.at} zIndexRange={[20, 10]} style={{ pointerEvents: "none" }}>
-          <div className={`hotspot hotspot-${h.side}`} ref={(el) => { if (el) tags.current[i] = el; }}>
-            <i /><span><b>{h.label}</b>{h.detail}</span>
-          </div>
-        </Html>
-      ))}
+      <group ref={spin}>
+        <Pumpkin insideRef={inside} wave={0.25} />
+        {HOTSPOTS.map((h, i) => (
+          <Html key={h.label} position={h.at} zIndexRange={[20, 10]} style={{ pointerEvents: "none" }}>
+            <div className={`hotspot hotspot-${h.side}`} ref={(el) => { if (el) tags.current[i] = el; }}>
+              <i /><span><b>{h.label}</b>{h.detail}</span>
+            </div>
+          </Html>
+        ))}
+      </group>
+      <ContactShadows position={[0, 0.006, -0.45]} opacity={0.55} scale={4.2} blur={2.4} far={1.6} />
     </group>
   );
 }
 
 /**
- * Repères des composants, dans le repère du pot (base au sol, axe au centre).
- * Emplacements indicatifs : à recaler sur le modèle 3D détaillé.
+ * Repères des composants (repère du boîtier : base au sol, face vers +z). Le module électronique
+ * est centré en z = -1 (cotes du plan × 0,0046) ; la caméra et le laser sont dans le nez.
  */
 const HOTSPOTS: { at: [number, number, number]; label: string; detail: string; side: "l" | "r" }[] = [
-  { at: [-0.1, 1.95, 0.25], label: "ESP32-CAM", detail: "caméra sur servo, dans le feuillage", side: "l" },
-  { at: [0.3, 1.38, 0.42], label: "Détecteur PIR", detail: "présence devant la baie", side: "r" },
-  { at: [-0.28, 1.12, 0.4], label: "Capteur à ultrasons", detail: "distance d'approche", side: "l" },
-  { at: [0.28, 0.9, 0.4], label: "Arduino UNO Q", detail: "contrôleur, Wi-Fi", side: "r" },
-  { at: [-0.3, 0.68, 0.42], label: "DHT22", detail: "température et humidité", side: "l" },
-  { at: [0.3, 0.46, 0.44], label: "Accéléromètre", detail: "choc et inclinaison", side: "r" },
-  { at: [-0.3, 0.26, 0.46], label: "Capteur de porte", detail: "infrarouge", side: "l" },
-  { at: [0.26, 0.12, 0.5], label: "Lecteur RFID", detail: "badges de l'équipe", side: "r" },
+  { at: [0.005, 1.47, 0.57], label: "ESP32-CAM et laser", detail: "cachés dans le nez", side: "l" },
+  { at: [0, 0.09, -1.0], label: "Arduino UNO Q et breadboard", detail: "sur leur socle, derrière", side: "l" },
+  { at: [0.0, 0.02, -0.55], label: "Câbles", detail: "passent sous la citrouille jusqu'à la tête", side: "r" },
 ];
 
 // ------------------------------------------------------------------------------------- sol et salle
@@ -150,7 +129,8 @@ function Floor({ live }: { live: LiveRef }) {
   );
 }
 
-const RACK_W = 2.1, RACK_D = 1.3, RACK_H = 3.2;
+const RACK_W = 2.1, RACK_D = 2.3, RACK_H = 3.2;
+const RACK_Z = -0.45; // la baie est assez profonde pour la citrouille et le module derrière
 
 /** Baie ouverte de la salle serveur : montants, étagères, serveurs aux voyants qui clignotent. */
 function Rack({ live, x, z = 0 }: { live: LiveRef; x: number; z?: number }) {
@@ -171,7 +151,7 @@ function Rack({ live, x, z = 0 }: { live: LiveRef; x: number; z?: number }) {
   }, []);
   const ledColor = (i: number) => (i % 7 === 3 ? STATE_COLOR.warn : i % 3 === 0 ? "#7fb8ff" : STATE_COLOR.ok);
   return (
-    <group ref={group} position={[x, 0, z]}>
+    <group ref={group} position={[x, 0, z + RACK_Z]}>
       {/* montants */}
       {[-1, 1].flatMap((sx) => [-1, 1].map((sz) => (
         <mesh key={`${sx}${sz}`} position={[(sx * RACK_W) / 2, -RACK_H / 2, (sz * RACK_D) / 2]}>
@@ -179,7 +159,7 @@ function Rack({ live, x, z = 0 }: { live: LiveRef; x: number; z?: number }) {
           <meshStandardMaterial color="#3a3a3e" metalness={1} roughness={0.35} />
         </mesh>
       )))}
-      {/* étagères : celle du haut affleure à y = 0, le pot y est posé */}
+      {/* étagères : celle du haut affleure à y = 0, le boîtier y est posé */}
       {[0, -1.07, -2.14, -3.2].map((y) => (
         <mesh key={y} position={[0, y - 0.03, 0]}>
           <boxGeometry args={[RACK_W + 0.08, 0.06, RACK_D + 0.08]} />
@@ -257,10 +237,10 @@ function Access({ live }: { live: LiveRef }) {
       card.current.style.transform = `translateY(${(1 - o) * 40}px)`;
       card.current.style.visibility = o > 0.01 ? "visible" : "hidden";
     }
-    // Le badge vient se présenter devant le lecteur, en bas de la façade du pot, puis repart.
-    const [px, , pz] = p.pot;
-    rest.set(px - 0.95, 1.25, pz + 1.3);
-    tap.set(px - 0.12, 0.42, pz + 0.62);
+    // Le badge vient se présenter devant le lecteur RFID, dans le buste, puis repart.
+    const [px, , pz] = p.box;
+    rest.set(px - 0.9, 0.55, pz + 1.5);
+    tap.set(px - 0.3, 0.38, pz + 0.78);
     const t = (clock.elapsedTime * MOTION) % BADGE_CYCLE;
     const go = t < 1.1 ? easeInOut(t / 1.1) : t < 1.9 ? 1 : t < 3 ? 1 - easeInOut((t - 1.9) / 1.1) : 0;
     if (badge.current) {
@@ -279,7 +259,7 @@ function Access({ live }: { live: LiveRef }) {
   });
   return (
     <>
-      <Html transform position={[1.95, 1.25, 0]} rotation-y={-0.3} distanceFactor={0.75} zIndexRange={[15, 5]} style={{ pointerEvents: "none" }}>
+      <Html transform position={[2.4, 1.3, -0.2]} rotation-y={-0.3} distanceFactor={0.62} zIndexRange={[15, 5]} style={{ pointerEvents: "none" }}>
         <div ref={card} className="face-card-wrap"><FaceScreen /></div>
       </Html>
       <group ref={badge}>
@@ -386,4 +366,3 @@ function Devices({ live }: { live: LiveRef }) {
   );
 }
 
-useGLTF.preload(potOpenUrl, false);

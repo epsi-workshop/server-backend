@@ -1,10 +1,9 @@
-import { Suspense, useMemo, useRef, type ReactNode } from "react";
+import { useMemo, useRef, type ReactNode } from "react";
 import { useFrame } from "@react-three/fiber";
-import { ContactShadows, Environment, Float, Lightformer, PerspectiveCamera, useGLTF } from "@react-three/drei";
+import { ContactShadows, Environment, Float, Lightformer, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
 import { MOTION, PALETTE, STATE_COLOR } from "./threat";
-import potClosedUrl from "../assets/pot-ferme.glb?url";
-import potOpenUrl from "../assets/pot-ouvert.glb?url";
+import { Pumpkin } from "./Pumpkin";
 
 /**
  * Objets 3D de l'interface, en finition « studio » : céramique émaillée, métal brossé, feuillage mat.
@@ -304,69 +303,51 @@ const ICONS: Record<IconKind, (p: IconProps) => JSX.Element> = {
   alerts: Warning,
 };
 
-// ------------------------------------------------------------------------------------- pot sentinelle
+// ------------------------------------------------------------------------------------- boîtier
 
-export type PotState = {
+export type BoxState = {
   online: boolean; // boîtier joignable
   motion: boolean; // PIR en cours de détection
   cameraLive: boolean; // flux caméra ouvert (détection en cours)
-  doorOpen: boolean; // porte du pot ouverte (capteur infrarouge)
 };
 
-// Modèle réel du boîtier (Blender) : demi-coques, insert, terreau et plante, exporté en glTF,
-// en deux versions (porte fermée / porte ouverte) affichées selon le capteur de la porte.
-const POT_HEIGHT = 2; // hauteur totale dans la scène, en unités three.js
-const VIEW_ANGLE = -0.31; // même angle que le rendu de présentation (caméra à 18° sur la gauche)
-
-/** Le boîtier camouflé, d'après le modèle 3D du pot : porte ouverte ou fermée selon le capteur, lumières d'état discrètes. */
-export function PotSentinel({ state }: { state: PotState }) {
+/**
+ * Le boîtier en direct : citrouille animée. Yeux verts au repos, ambre pendant une détection,
+ * rouges quand le flux caméra est ouvert, éteints hors ligne. La tête balaie et les mains
+ * s'agitent pendant un mouvement.
+ */
+export function BoxSentinel({ state }: { state: BoxState }) {
+  const glow = state.cameraLive ? STATE_COLOR.crit : state.motion ? STATE_COLOR.warn : undefined;
   return (
     <>
-      <PerspectiveCamera makeDefault position={[0, 1.25, 4.4]} fov={33} onUpdate={(c) => c.lookAt(0, 0.82, 0)} />
+      <PerspectiveCamera makeDefault position={[0, 1.6, 5.4]} fov={33} onUpdate={(c) => c.lookAt(0, 0.95, -0.45)} />
       <ambientLight intensity={0.35} />
       <directionalLight position={[3, 5, 4]} intensity={1.7} />
       <directionalLight position={[-4, 2, -2]} intensity={0.5} color="#dfe8ff" />
       <StudioEnvironment resolution={256} />
-      {/* Détection : lueur ocre sur la façade ; flux en direct : touche rouge dans le feuillage */}
-      <pointLight position={[0, 0.6, 1.4]} intensity={state.motion ? 4 : 0} distance={3} color={STATE_COLOR.warn} />
-      <pointLight position={[0, 1.7, 0.9]} intensity={state.cameraLive ? 3 : 0} distance={2} color={STATE_COLOR.crit} />
-      <Suspense fallback={null}><PotModel url={state.doorOpen ? potOpenUrl : potClosedUrl} dim={!state.online} /></Suspense>
-      <ContactShadows position={[0, -0.16, 0]} opacity={0.5} scale={3.2} blur={2.4} far={1.6} />
+      <BoxModel state={state} glow={glow} />
+      <ContactShadows position={[0, 0.005, -0.45]} opacity={0.55} scale={4} blur={2.4} far={1.6} />
     </>
   );
 }
 
-function PotModel({ url, dim }: { url: string; dim: boolean }) {
-  const { scene } = useGLTF(url, false);
-  // Porte ouverte face à la caméra : léger balancement autour de cet angle, l'intérieur reste visible.
-  const sway = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
-    if (sway.current) sway.current.rotation.y = VIEW_ANGLE + Math.sin(clock.elapsedTime * 0.35 * MOTION) * 0.22;
+function BoxModel({ state, glow }: { state: BoxState; glow?: string }) {
+  // Balayage de la tête par le servo : large pendant une détection, lent au repos.
+  const sweep = useRef(0);
+  const turn = useRef<THREE.Group>(null);
+  useFrame(({ clock }, dt) => {
+    const t = clock.elapsedTime * MOTION;
+    sweep.current = state.motion ? Math.sin(t * 1.2) * 0.45 : Math.sin(t * 0.3) * 0.12;
+    // L'ensemble (citrouille et module électronique) tourne lentement sur lui-même.
+    if (turn.current) turn.current.rotation.y += dt * 0.35 * MOTION;
   });
-  // Copie mise à l'échelle et posée au sol, axe du pot au centre.
-  const model = useMemo(() => {
-    const root = scene.clone(true);
-    const box = new THREE.Box3().setFromObject(root);
-    const size = box.getSize(new THREE.Vector3());
-    const k = POT_HEIGHT / size.y;
-    root.scale.setScalar(k);
-    const center = box.getCenter(new THREE.Vector3());
-    root.position.set(-center.x * k, -box.min.y * k - 0.15, -center.z * k);
-    root.traverse((o) => { if ((o as THREE.Mesh).isMesh) (o as THREE.Mesh).castShadow = true; });
-    return root;
-  }, [scene]);
-  // Boîtier hors ligne : légèrement désaturé et assombri.
-  useMemo(() => {
-    model.traverse((o) => {
-      const m = (o as THREE.Mesh).material as THREE.MeshStandardMaterial | undefined;
-      if (!m || !("color" in m)) return;
-      m.userData.base ??= m.color.clone();
-      m.color.copy(m.userData.base as THREE.Color);
-      if (dim) m.color.lerp(new THREE.Color("#777777"), 0.55);
-    });
-  }, [model, dim]);
-  return <group ref={sway}><primitive object={model} /></group>;
+  return (
+    // Pivot au centre de l'emprise (citrouille + module derrière).
+    <group ref={turn} position={[0, 0, -0.45]}>
+      <group position={[0, 0, 0.45]}>
+        <Pumpkin glow={glow} glowLevel={state.online ? 1.5 : 0}
+          yawRef={sweep} wave={state.motion ? 1 : 0.15} dim={!state.online} />
+      </group>
+    </group>
+  );
 }
-
-useGLTF.preload(potClosedUrl, false);
-useGLTF.preload(potOpenUrl, false);

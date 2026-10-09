@@ -88,8 +88,8 @@ export function LaptopScreen() {
           <div className="scr-card"><small>Température</small><b>22,4<em>°C</em></b><Spark d={TEMP} /></div>
           <div className="scr-card"><small>Humidité</small><b>47,8<em>%</em></b><Spark d={HUM} /></div>
           <div className="scr-card"><small>Présence (PIR)</small><span className="scr-state"><i className="dot ok" />Aucun mouvement</span><span className="scr-meta">Dernier déclenchement · 14 min</span></div>
-          <div className="scr-card"><small>Badge (RFID)</small><span className="scr-state"><i className="dot ok" />Badge accepté</span><span className="scr-meta">Camille D. · il y a 2 min</span></div>
-          <div className="scr-card"><small>Intégrité</small><span className="scr-state"><i className="dot ok" />Porte fermée</span><span className="scr-meta">Inclinaison 0,4° · 1,00 g</span></div>
+          <div className="scr-card"><small>Armement (RFID)</small><span className="scr-state"><i className="dot ok" />Système armé</span><span className="scr-meta">Badge de Camille D. · il y a 2 min</span></div>
+          <div className="scr-card"><small>Capot</small><span className="scr-state"><i className="dot ok" />Capot fermé</span><span className="scr-meta">Capteur infrarouge</span></div>
           <div className="scr-card"><small>Caméra</small><span className="scr-state"><i className="dot ok" />Flux verrouillé</span><span className="scr-meta">S'ouvre à la détection</span></div>
         </div>
         <div className="scr-row">
@@ -104,8 +104,8 @@ export function LaptopScreen() {
             <small>Dernières alertes</small>
             <ul className="scr-list">
               <li><span className="lvl crit">Critique</span>Visage inconnu<em>02:14</em></li>
-              <li><span className="lvl warn">Alerte</span>Porte ouverte<em>02:13</em></li>
-              <li><span className="lvl">Info</span>Badge accepté<em>08:02</em></li>
+              <li><span className="lvl warn">Alerte</span>Capot ouvert<em>02:13</em></li>
+              <li><span className="lvl">Info</span>Badge · système désarmé<em>08:02</em></li>
               <li><span className="lvl">Info</span>Système armé<em>08:03</em></li>
             </ul>
           </div>
@@ -132,7 +132,7 @@ export function PhoneScreen() {
         <small>Dernières alertes</small>
         <ul className="ph-alerts">
           <li><span className="lvl warn">Alerte</span>Température en hausse</li>
-          <li><span className="lvl">Info</span>Badge accepté · Camille D.</li>
+          <li><span className="lvl">Info</span>Système armé · Camille D.</li>
           <li><span className="lvl crit">Critique</span>Visage inconnu</li>
         </ul>
       </div>

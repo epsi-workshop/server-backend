@@ -4,7 +4,7 @@ import type { Api } from "./client";
 import { ApiError, notifyUnauthorized } from "./client";
 import { hasRole } from "../util";
 import type {
-  Alert, AuditEntry, Badge, BadgeEnrollState, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogLevel, LogSource,
+  Alert, AudioState, AuditEntry, Badge, BadgeEnrollState, BluetoothDevice, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogLevel, LogSource,
   Point, RestartRequest, RestartTarget, Role, ServiceHealth, Settings, SystemState, ThreatLevel, User,
 } from "../types";
 import { captureDataUrl, type SceneOpts } from "./mockScene";
@@ -25,6 +25,11 @@ const users: (User & { password: string })[] = [
 ];
 
 const team: TeamMember[] = [];
+let audio: AudioState = { speaker: null, ready: false, volume: 80, sounds: ["test", "ok", "refused", "hello", "siren"] };
+const btDevices: BluetoothDevice[] = [
+  { mac: "04:56:E5:77:94:16", name: "JBL Flip 5", paired: false, connected: false, audio: true },
+  { mac: "3C:06:30:2E:73:AE", name: "MacBook Pro", paired: false, connected: false, audio: false },
+];
 let enroll: BadgeEnrollState = { listening: false, until: null, uid: null, owner: null };
 
 const badges: Badge[] = [
@@ -643,6 +648,22 @@ export const mockApi: Api = {
   },
   async getBadgeEnroll() { need("admin"); return clone(enroll); },
   async stopBadgeEnroll() { need("admin"); enroll = { listening: false, until: null, uid: null, owner: null }; },
+
+  async getAudio() { need("admin"); await wait(); return clone(audio); },
+  async scanSpeakers() { need("admin"); await wait(1500); return clone(btDevices); },
+  async connectSpeaker(t) {
+    need("admin"); await wait(1500);
+    const d = btDevices.find((x) => x.mac === t.mac || (t.name && x.name.toLowerCase().includes(t.name.toLowerCase())));
+    if (!d) throw new ApiError(409, `aucune enceinte « ${t.name} » trouvée : est-elle en mode appairage ?`);
+    audio = { ...audio, speaker: { mac: d.mac, name: d.name, connected: true }, ready: true };
+    auditAdd(`Enceinte Bluetooth connectée : ${d.name}`);
+    return clone(audio);
+  },
+  async disconnectSpeaker() { need("admin"); audio = { ...audio, speaker: audio.speaker && { ...audio.speaker, connected: false }, ready: false }; return clone(audio); },
+  async forgetSpeaker() { need("admin"); audio = { ...audio, speaker: null, ready: false }; return clone(audio); },
+  async setVolume(pct) { need("admin"); audio = { ...audio, volume: pct }; return clone(audio); },
+  async playSound() { need("admin"); return {}; },
+  async stopSound() { need("admin"); return {}; },
 
   async getTeam() { need("admin"); await wait(); return clone(team); },
   async createMember(m) {

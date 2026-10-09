@@ -1,5 +1,5 @@
 import type {
-  Alert, AuditEntry, Badge, BadgeEnrollState, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogFilter,
+  Alert, AudioState, AuditEntry, Badge, BadgeEnrollState, BluetoothDevice, TestSound, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogFilter,
   Point, RestartRequest, ServiceHealth, Settings, SystemState, User,
 } from "../types";
 
@@ -45,6 +45,17 @@ export interface Api {
   startBadgeEnroll(): Promise<BadgeEnrollState>;
   getBadgeEnroll(): Promise<BadgeEnrollState>;
   stopBadgeEnroll(): Promise<void>;
+
+  getAudio(): Promise<AudioState>;
+  /** Recherche Bluetooth (environ 8 s) : enceintes en premier. */
+  scanSpeakers(): Promise<BluetoothDevice[]>;
+  /** Appairage et connexion, par adresse ou par nom (recherche). Jusqu'à une minute. */
+  connectSpeaker(target: { mac?: string; name?: string }): Promise<AudioState>;
+  disconnectSpeaker(): Promise<AudioState>;
+  forgetSpeaker(): Promise<AudioState>;
+  setVolume(pct: number): Promise<AudioState>;
+  playSound(sound: TestSound): Promise<unknown>;
+  stopSound(): Promise<unknown>;
 
   getTeam(): Promise<TeamMember[]>;
   /** photo : image en data URL ; le backend refuse une photo sans visage ou avec plusieurs visages. */

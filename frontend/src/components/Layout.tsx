@@ -29,7 +29,7 @@ export default function Layout() {
           <Logo3DSlot className="brand-logo" />
           <div>
             <strong>Sentinel</strong>
-            <span>Pot sentinelle · box01</span>
+            <span>Boîtier · box01</span>
           </div>
         </div>
         <nav className="nav">

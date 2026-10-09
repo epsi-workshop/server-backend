@@ -142,6 +142,15 @@ export const liveApi: Api = {
   getBadgeEnroll: () => get("/api/badges/enroll"),
   stopBadgeEnroll: () => del("/api/badges/enroll"),
 
+  getAudio: () => get("/api/audio"),
+  scanSpeakers: () => get("/api/audio/devices"),
+  connectSpeaker: (t) => post("/api/audio/connect", t),
+  disconnectSpeaker: () => post("/api/audio/disconnect", {}),
+  forgetSpeaker: async () => { await del("/api/audio/speaker"); return get("/api/audio"); },
+  setVolume: (pct) => post(`/api/audio/volume/${Math.round(pct)}`, {}),
+  playSound: (s) => post(`/api/audio/sound/${s}`, {}),
+  stopSound: () => post("/api/audio/stop", {}),
+
   getTeam: () => get("/api/team"),
   createMember: (m) => post("/api/team", m),
   updateMember: (id, p) => patch(`/api/team/${seg(id)}`, p),

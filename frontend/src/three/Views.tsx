@@ -1,6 +1,6 @@
 import { Canvas } from "@react-three/fiber";
 import { View } from "@react-three/drei";
-import { Icon3D, Logo3D, PotSentinel, type IconKind, type PotState, type Tone } from "./Objects";
+import { BoxSentinel, Icon3D, Logo3D, type BoxState, type IconKind, type Tone } from "./Objects";
 
 /**
  * Un seul canvas WebGL, au-dessus des panneaux, dans lequel sont dessinés tous les objets 3D de
@@ -24,6 +24,6 @@ export function Logo3DSlot({ className }: { className?: string }) {
   return <View className={`slot3d ${className ?? ""}`}><Logo3D /></View>;
 }
 
-export function PotSlot({ state, className }: { state: PotState; className?: string }) {
-  return <View className={`slot3d ${className ?? ""}`}><PotSentinel state={state} /></View>;
+export function BoxSlot({ state, className }: { state: BoxState; className?: string }) {
+  return <View className={`slot3d ${className ?? ""}`}><BoxSentinel state={state} /></View>;
 }

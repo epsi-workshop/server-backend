@@ -3,11 +3,8 @@ import { Lock, Video } from "lucide-react";
 import { useLive } from "../store";
 import { Dot, Empty, Loading, Panel, Sparkline } from "../components/ui";
 import { LEVEL_LABEL, ago, cameraOpen, fmtDuration, fmtNum, overrideLeftS } from "../util";
-import { PotSlot } from "../three/Views";
+import { BoxSlot } from "../three/Views";
 import { FaceBanner } from "../components/FaceBanner";
-
-const DIST_MAX = 250;
-const DIST_THRESHOLD = 50;
 
 export default function Overview() {
   const { state, trend, alerts, error } = useLive();
@@ -16,22 +13,20 @@ export default function Overview() {
   const { sensors: s, device: d, camera: c, anomaly: an } = state;
   const camOpen = cameraOpen(c);
   const forced = overrideLeftS(c) > 0;
-  const distPct = Math.min(100, (s.distance.cm / DIST_MAX) * 100);
-  const tooClose = s.distance.cm < DIST_THRESHOLD;
   const rssiTone = d.rssi > -65 ? "ok" : d.rssi > -75 ? "warn" : "crit";
 
   return (
     <div className="grid">
       <FaceBanner face={c.lastFace} />
       <Panel title="Boîtier box01" className="span-4 row-2" tone={!d.online ? "crit" : s.pir.active ? "warn" : undefined}>
-        <PotSlot className="pot-view" state={{ online: d.online, motion: s.pir.active, cameraLive: camOpen, doorOpen: s.lid.open }} />
+        <BoxSlot className="pot-view" state={{ online: d.online, motion: s.pir.active, cameraLive: camOpen}} />
         <p className="pot-caption">Modèle 3D du boîtier · état en direct</p>
         <dl className="facts pot-legend">
-          <div><dt>Caméra<small>ESP32-CAM + servo</small></dt><dd><Dot tone={!c.online ? "crit" : camOpen ? "warn" : "ok"} />{!c.online ? "Hors ligne" : camOpen ? "En direct" : "En veille"}</dd></div>
-          <div><dt>Porte<small>capteur infrarouge</small></dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouverte" : "Fermée"}</dd></div>
+          <div><dt>Caméra<small>ESP32-CAM et laser, dans le nez</small></dt><dd><Dot tone={!c.online ? "crit" : camOpen ? "warn" : "ok"} />{!c.online ? "Hors ligne" : camOpen ? "En direct" : "En veille"}</dd></div>
+          <div><dt>Capot<small>ouverture du boîtier, capteur infrarouge</small></dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouvert" : "Fermé"}</dd></div>
           <div><dt>Détecteur de présence<small>PIR</small></dt><dd><Dot tone={s.pir.active ? "warn" : "ok"} />{s.pir.active ? "Mouvement" : "Calme"}</dd></div>
           <div><dt>Température · humidité<small>DHT22</small></dt><dd>{fmtNum(s.temperature.value)} °C · {fmtNum(s.humidity.value, 0)} %</dd></div>
-          <div><dt>Verrou<small>lecteur RFID</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armé, porte verrouillée" : "Désarmé, porte libre"}</dd></div>
+          <div><dt>Armement<small>badge RFID</small></dt><dd><Dot tone={d.armed ? "ok" : "off"} />{d.armed ? "Armé" : "Désarmé"}</dd></div>
           <div><dt>Contrôleur<small>Arduino UNO Q</small></dt><dd><Dot tone={d.online ? "ok" : "crit"} />{d.online ? `En ligne · ${fmtDuration(d.uptimeS)}` : "Muet"}</dd></div>
         </dl>
       </Panel>
@@ -86,24 +81,14 @@ export default function Overview() {
         </dl>
       </Panel>
 
-      <Panel title="Proximité (ultrasons)" className="span-4" icon="distance" tone={tooClose ? "warn" : undefined}>
-        <div className="readout readout-small">
-          <span className="readout-value">{s.distance.cm}</span>
-          <span className="readout-unit">cm</span>
+      <Panel title="Capot du boîtier" className="span-4" icon="integrity" tone={s.lid.open ? "crit" : undefined}>
+        <div className="big-state">
+          <Dot tone={s.lid.open ? "crit" : "ok"} />
+          <strong>{s.lid.open ? "Capot ouvert" : "Capot fermé"}</strong>
         </div>
-        <div className="gauge" role="img" aria-label={`Distance ${s.distance.cm} cm, seuil ${DIST_THRESHOLD} cm`}>
-          <div className="gauge-zone" style={{ width: `${(DIST_THRESHOLD / DIST_MAX) * 100}%` }} />
-          <div className={`gauge-fill ${tooClose ? "near" : ""}`} style={{ width: `${distPct}%` }} />
-        </div>
-        <div className="gauge-scale"><span>0</span><span>seuil {DIST_THRESHOLD} cm</span><span>{DIST_MAX} cm</span></div>
-      </Panel>
-
-      <Panel title="Intégrité du boîtier" className="span-4" icon="integrity" tone={s.lid.open || s.imu.shock ? "crit" : undefined}>
-        <dl className="facts facts-tight">
-          <div><dt>Porte</dt><dd><Dot tone={s.lid.open ? "crit" : "ok"} />{s.lid.open ? "Ouverte" : "Fermée"}</dd></div>
-          <div><dt>Accélération</dt><dd className={s.imu.shock ? "txt-crit" : ""}>{fmtNum(s.imu.accelG, 2)} g</dd></div>
-          <div><dt>Inclinaison</dt><dd>{fmtNum(s.imu.tiltDeg)}°</dd></div>
-          <div><dt>Dernier choc</dt><dd>{ago(s.imu.lastShock)}</dd></div>
+        <dl className="facts">
+          <div><dt>Capteur</dt><dd>infrarouge</dd></div>
+          <div><dt>Dernier changement</dt><dd>{ago(s.lid.lastChange)}</dd></div>
         </dl>
       </Panel>
 
@@ -123,17 +108,17 @@ export default function Overview() {
         ) : <Empty>Aucun visage vu depuis le démarrage.</Empty>}
       </Panel>
 
-      <Panel title="Badge (RFID)" className="span-4" icon="rfid" tone={s.rfid.accepted === false ? "warn" : undefined}>
+      <Panel title="Armement (badge RFID)" className="span-4" icon="rfid" tone={s.rfid.accepted === false ? "warn" : undefined}>
         {s.rfid.ts ? (
           <>
             <div className="big-state">
               <Dot tone={s.rfid.accepted ? "ok" : "warn"} />
-              <strong>{s.rfid.accepted ? "Badge accepté" : "Badge refusé"}</strong>
+              <strong>{s.rfid.accepted ? (d.armed ? "Système armé" : "Système désarmé") : "Badge refusé"}</strong>
             </div>
             <dl className="facts">
               <div><dt>Titulaire</dt><dd>{s.rfid.lastName ?? "inconnu"}</dd></div>
               <div><dt>UID</dt><dd className="tabular">{s.rfid.lastUid}</dd></div>
-              <div><dt>Présenté</dt><dd>{ago(s.rfid.ts)}</dd></div>
+              <div><dt>Dernier badge</dt><dd>{ago(s.rfid.ts)}</dd></div>
             </dl>
           </>
         ) : <Empty>Aucun badge présenté.</Empty>}

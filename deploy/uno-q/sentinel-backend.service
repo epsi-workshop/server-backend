@@ -1,0 +1,12 @@
+[Unit]
+Description=Sentinel backend (API du tableau de bord)
+After=network-online.target sensor-api.service
+
+[Service]
+WorkingDirectory=%h/sentinel/backend
+ExecStart=%h/sentinel/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8080 --proxy-headers --forwarded-allow-ips 127.0.0.1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target

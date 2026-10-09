@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BellRing, Camera, ImagePlus, Nfc, KeyRound, Power, RefreshCw, Trash2, UserPlus } from "lucide-react";
+import { BellRing, Bluetooth, Camera, ImagePlus, Nfc, Search, Volume2, VolumeX, KeyRound, Power, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { api } from "../api";
 import { useAuth, useLive, useToast } from "../store";
 import { Confirm, Dot, Empty, Loading, Panel, Tabs } from "../components/ui";
-import type { Badge, BadgeEnrollState, RestartRequest, Role, ServiceHealth, Settings, TeamMember, User } from "../types";
+import type { AudioState, Badge, BadgeEnrollState, BluetoothDevice, TestSound, RestartRequest, Role, ServiceHealth, Settings, TeamMember, User } from "../types";
 import { ROLE_LABEL, ago, errMsg, fmtDuration, fmtNum } from "../util";
 
-type Tab = "systeme" | "utilisateurs" | "equipe" | "badges" | "detection";
+type Tab = "systeme" | "utilisateurs" | "equipe" | "badges" | "son" | "detection";
 
 export default function Admin() {
   const [tab, setTab] = useState<Tab>("systeme");
@@ -16,13 +16,14 @@ export default function Admin() {
         <h1>Administration</h1>
         <Tabs value={tab} onChange={setTab} items={[
           { id: "systeme", label: "Système" }, { id: "utilisateurs", label: "Utilisateurs" },
-          { id: "equipe", label: "Équipe" }, { id: "badges", label: "Badges" }, { id: "detection", label: "Détection" },
+          { id: "equipe", label: "Équipe" }, { id: "badges", label: "Badges" }, { id: "son", label: "Son" }, { id: "detection", label: "Détection" },
         ]} />
       </div>
       {tab === "systeme" && <SystemTab />}
       {tab === "utilisateurs" && <UsersTab />}
       {tab === "equipe" && <TeamTab />}
       {tab === "badges" && <BadgesTab />}
+      {tab === "son" && <SoundTab />}
       {tab === "detection" && <DetectionTab />}
     </div>
   );
@@ -314,6 +315,99 @@ function TeamTab() {
   );
 }
 
+// ---------------------------------------------------------------- Son (enceinte Bluetooth)
+const SOUND_TESTS: { id: TestSound; label: string }[] = [
+  { id: "test", label: "Test" }, { id: "ok", label: "Badge accepté" }, { id: "refused", label: "Badge refusé" },
+  { id: "hello", label: "Bienvenue" }, { id: "siren", label: "Sirène 5 s" },
+];
+
+function SoundTab() {
+  const toast = useToast();
+  const [audio, setAudio] = useState<AudioState | null>(null);
+  const [devices, setDevices] = useState<BluetoothDevice[] | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);  // action en cours (recherche, connexion…)
+  const [manual, setManual] = useState("");
+  const [volume, setVolume] = useState(80);
+  const load = useCallback(() => api.getAudio().then((a) => { setAudio(a); setVolume(a.volume); })
+    .catch((e) => toast(errMsg(e), "err")), [toast]);
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (key: string, fn: () => Promise<unknown>, ok?: string) => {
+    setBusy(key);
+    try { await fn(); if (ok) toast(ok); return true; } catch (e) { toast(errMsg(e), "err"); return false; } finally { setBusy(null); }
+  };
+  const connect = (target: { mac?: string; name?: string }, label: string) =>
+    run(`connect:${target.mac ?? target.name}`, async () => { setAudio(await api.connectSpeaker(target)); setDevices(null); }, `${label} connectée`);
+  const sp = audio?.speaker;
+
+  return (
+    <>
+      <Panel title="Enceinte Bluetooth">
+        {!audio ? <Loading /> : (
+          <div className="speaker-state">
+            <span className={`speaker-icon${audio.ready ? " is-on" : ""}`}><Bluetooth size={22} /></span>
+            <div>
+              <strong>{sp ? sp.name ?? sp.mac : "Aucune enceinte"}</strong>
+              <span className="muted small">
+                {!sp ? "Choisissez une enceinte ci-dessous : talos s'y reconnectera tout seul dès qu'elle est allumée."
+                  : audio.ready ? `Connectée · ${sp.mac}` : sp.connected ? "Connexion en cours…" : `Déconnectée : allumez-la, talos s'y reconnecte automatiquement (${sp.mac})`}
+              </span>
+            </div>
+            {sp && (
+              <div className="speaker-actions">
+                {sp.connected
+                  ? <button className="btn" disabled={!!busy} onClick={() => run("disc", async () => setAudio(await api.disconnectSpeaker()), "Enceinte déconnectée")}>Déconnecter</button>
+                  : <button className="btn" disabled={!!busy} onClick={() => connect({ mac: sp.mac }, sp.name ?? "Enceinte")}>{busy === `connect:${sp.mac}` ? "Connexion…" : "Reconnecter"}</button>}
+                <button className="icon-btn danger" disabled={!!busy} title="Oublier l'enceinte" aria-label="Oublier l'enceinte"
+                  onClick={() => run("forget", async () => setAudio(await api.forgetSpeaker()), "Enceinte oubliée")}><Trash2 size={16} /></button>
+              </div>
+            )}
+          </div>
+        )}
+        {audio?.ready && (
+          <>
+            <label className="field volume-field"><span>Volume : {volume} %</span>
+              <input type="range" min={0} max={100} step={5} value={volume} onChange={(e) => setVolume(Number(e.target.value))}
+                onPointerUp={() => run("vol", async () => setAudio(await api.setVolume(volume)))}
+                onKeyUp={() => run("vol", async () => setAudio(await api.setVolume(volume)))} /></label>
+            <div className="sound-tests">
+              {SOUND_TESTS.map((t) => (
+                <button key={t.id} className="btn" onClick={() => run(`play:${t.id}`, () => api.playSound(t.id))}><Volume2 size={15} />{t.label}</button>
+              ))}
+              <button className="btn btn-danger" onClick={() => run("stop", () => api.stopSound(), "Son coupé")}><VolumeX size={15} />Couper</button>
+            </div>
+          </>
+        )}
+      </Panel>
+
+      <Panel title="Choisir une enceinte" action={
+        <button className="btn btn-primary" disabled={!!busy} onClick={() => run("scan", async () => setDevices(await api.scanSpeakers()))}>
+          <Search size={15} />{busy === "scan" ? "Recherche… (8 s)" : "Rechercher"}
+        </button>}>
+        <p className="muted small">Mettez l'enceinte en <strong>mode appairage</strong> (bouton Bluetooth maintenu, voyant qui clignote vite), puis lancez la recherche.</p>
+        {devices && (devices.length === 0 ? <Empty>Aucun appareil trouvé. L'enceinte est-elle en mode appairage et à moins de 10 m ?</Empty> : (
+          <ul className="bt-list">
+            {devices.map((d) => (
+              <li key={d.mac} className={d.audio ? "" : "is-other"}>
+                <Bluetooth size={16} />
+                <div><strong>{d.name}</strong><span className="muted small">{d.audio ? "Enceinte / audio" : "Autre appareil"} · {d.mac}{d.paired ? " · appairé" : ""}</span></div>
+                <button className="btn" disabled={!!busy} onClick={() => connect({ mac: d.mac }, d.name)}>
+                  {busy === `connect:${d.mac}` ? "Connexion…" : d.connected ? "Connectée" : "Connecter"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        ))}
+        <form className="form-row" onSubmit={async (e) => { e.preventDefault(); if (await connect({ name: manual.trim() }, manual.trim())) setManual(""); }}>
+          <label className="field field-grow"><span>Ou saisissez son nom (même partiel)</span>
+            <input required maxLength={64} placeholder="ex. JBL Flip 5" value={manual} onChange={(e) => setManual(e.target.value)} /></label>
+          <button className="btn" type="submit" disabled={!!busy}>{busy === `connect:${manual.trim()}` ? "Recherche et connexion…" : "Connecter par nom"}</button>
+        </form>
+      </Panel>
+    </>
+  );
+}
+
 // ---------------------------------------------------------------- Badges
 /** « Lire un badge » : le backend écoute le lecteur 30 s ; l'UID du prochain badge passé remplit le formulaire. */
 function BadgeReader({ onRead }: { onRead: (uid: string) => void }) {
@@ -422,9 +516,10 @@ function BadgesTab() {
 }
 
 // ---------------------------------------------------------------- Détection
-const WEIGHT_LABEL: Record<keyof Settings["weights"], string> = {
-  pir: "Mouvement PIR", proximite: "Objet à moins de 50 cm", vision: "Mouvement détecté par la caméra",
-  choc: "Choc ou déplacement du boîtier", capot: "Capot ouvert", muet: "Boîtier muet",
+// Ultrasons (proximite) et accéléromètre (choc) ne sont plus montés : leurs poids restent en base, sans réglage.
+const WEIGHT_LABEL: Partial<Record<keyof Settings["weights"], string>> = {
+  pir: "Mouvement PIR", vision: "Mouvement détecté par la caméra",
+  capot: "Capot ouvert", muet: "Boîtier muet",
   anomalie: "Anomalie environnementale", badgeRefuse: "Badge refusé",
 };
 const DAYS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];

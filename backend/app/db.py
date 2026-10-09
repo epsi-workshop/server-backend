@@ -7,6 +7,7 @@ from sqlalchemy import (
     BigInteger, Column, DateTime, Float, ForeignKey, Index, Integer, LargeBinary, String, Table, Text, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -142,13 +143,23 @@ async def init_db() -> None:
 
 
 async def apply_retention(days: int) -> None:
-    async with engine.begin() as conn:
-        for table in HYPERTABLES:
-            await conn.execute(text("SELECT remove_retention_policy(CAST(:t AS regclass), if_exists => TRUE)"), {"t": table})
-            await conn.execute(
-                text("SELECT add_retention_policy(CAST(:t AS regclass), make_interval(days => :d))"),
-                {"t": table, "d": days},
-            )
+    try:
+        async with engine.begin() as conn:
+            for table in HYPERTABLES:
+                await conn.execute(text("SELECT remove_retention_policy(CAST(:t AS regclass), if_exists => TRUE)"), {"t": table})
+                await conn.execute(
+                    text("SELECT add_retention_policy(CAST(:t AS regclass), make_interval(days => :d))"),
+                    {"t": table, "d": days},
+                )
+    except DBAPIError:
+        # Édition Apache de TimescaleDB (paquet Debian, UNO Q) : pas de politique de rétention.
+        # On supprime les anciennes données une fois, à chaque démarrage et changement de réglage.
+        async with engine.begin() as conn:
+            for table in HYPERTABLES:
+                await conn.execute(
+                    text("SELECT drop_chunks(CAST(:t AS regclass), older_than => make_interval(days => :d))"),
+                    {"t": table, "d": days},
+                )
 
 
 async def get_db() -> AsyncIterator[AsyncSession]:

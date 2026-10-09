@@ -20,8 +20,7 @@ WS_FORBIDDEN = 4403
 async def live_socket(ws: WebSocket) -> None:
     # On accepte avant de vérifier : c'est le seul moyen d'envoyer un code de fermeture (4401) au navigateur.
     await ws.accept()
-    origin = (ws.headers.get("origin") or "").rstrip("/")
-    if origin not in config.origins:  # protection contre le détournement de WebSocket inter-sites
+    if not config.origin_allowed(ws.headers.get("origin") or "", ws.headers.get("host")):  # protection contre le détournement de WebSocket inter-sites
         await ws.close(WS_FORBIDDEN)
         return
     token = ws.cookies.get(SESSION_COOKIE)

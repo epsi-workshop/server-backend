@@ -1,0 +1,519 @@
+<title>Câblage Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout : fiche de câblage d'atelier — tableau de référence, puis deux schémas pleine largeur pour la citrouille. */
+:root {
+  --bg: #f1f3f1;
+  --paper: #ffffff;
+  --ink: #18201c;
+  --muted: #5b6760;
+  --line: #d3dbd5;
+  --accent: #c2581e;
+  --accent-soft: rgb(194 88 30 / .1);
+  --ok: #3f7d4a;
+  --warn: #a8741a;
+  --crit: #b23a2a;
+  --w-red: #d23b2e; --w-black: #1d1f20; --w-green: #2f9a4f; --w-blue: #2f6fd0;
+  --w-white: #a8b0ab; --w-yellow: #d8a41c; --w-orange: #e07a26; --w-grey: #8b938e;
+  --board: #e8eee9; --relay: #2c6fc0; --mos: #c23b32; --uno: #1e5fa8;
+  --display: "Archivo", "Helvetica Neue", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111513; --paper: #181e1b; --ink: #e3eae5; --muted: #95a39a; --line: #2c3631;
+    --accent: #ef8a4c; --accent-soft: rgb(239 138 76 / .13); --ok: #7cc189; --warn: #e2b05a; --crit: #ef7d6b;
+    --w-black: #9aa19d; --w-white: #d9dfdb; --board: #222a26; --relay: #5d9be6; --mos: #e46a60; --uno: #5b93d8;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111513; --paper: #181e1b; --ink: #e3eae5; --muted: #95a39a; --line: #2c3631;
+  --accent: #ef8a4c; --accent-soft: rgb(239 138 76 / .13); --ok: #7cc189; --warn: #e2b05a; --crit: #ef7d6b;
+  --w-black: #9aa19d; --w-white: #d9dfdb; --board: #222a26; --relay: #5d9be6; --mos: #e46a60; --uno: #5b93d8;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+.page { max-width: 1120px; margin: 0 auto; padding: 28px 20px 60px; display: flex; flex-direction: column; gap: 34px; }
+header h1 { font: 800 clamp(30px, 4.4vw, 46px)/1 var(--display); letter-spacing: -.02em; margin: 0 0 10px; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 64ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.chip { font: 500 12.5px/1 var(--mono); padding: 6px 9px; border-radius: 6px; background: var(--paper); border: 1px solid var(--line); color: var(--muted); }
+h2 { font: 800 22px/1.1 var(--display); margin: 0 0 4px; letter-spacing: -.01em; }
+.sub { color: var(--muted); margin: 0 0 14px; font-size: 14px; }
+section { min-width: 0; }
+
+.table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+table { border-collapse: collapse; width: 100%; min-width: 720px; }
+th, td { text-align: left; padding: 10px 14px; border-top: 1px solid var(--line); vertical-align: top; }
+thead th { border-top: 0; font: 600 11.5px/1.2 var(--body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); background: var(--bg); }
+td.pin { font: 600 14px var(--mono); white-space: nowrap; }
+td.pin span { display: inline-block; min-width: 2.6em; padding: 2px 6px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); text-align: center; }
+td.comp strong { display: block; font-weight: 600; }
+td.comp small { color: var(--muted); }
+.pwr { font: 500 13px var(--mono); white-space: nowrap; }
+.pwr .v5 { color: var(--crit); } .pwr .v3 { color: var(--warn); }
+.note { color: var(--muted); font-size: 13.5px; }
+.pill { font: 600 11px/1 var(--body); letter-spacing: .05em; text-transform: uppercase; padding: 4px 7px; border-radius: 5px; border: 1px solid currentColor; white-space: nowrap; }
+.pill.ok { color: var(--ok); } .pill.todo { color: var(--warn); } .pill.free { color: var(--muted); }
+
+.pins { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.pinbox { background: var(--paper); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; display: flex; flex-direction: column; gap: 2px; }
+.pinbox b { font: 600 15px var(--mono); }
+.pinbox span { font-size: 12.5px; color: var(--muted); line-height: 1.3; }
+.pinbox.used b { color: var(--accent); }
+.pinbox.free { border-style: dashed; }
+
+.rails { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.rail { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+.rail h3 { margin: 0 0 6px; font: 600 15px var(--body); display: flex; align-items: center; gap: 8px; }
+.rail h3 i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.rail ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14px; }
+
+.pumpkin { background: var(--paper); border: 1px solid var(--line); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 18px; }
+.pumpkin h2 { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.pumpkin h2 em { font: 500 13px var(--mono); font-style: normal; color: var(--accent); }
+.schema { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); }
+.schema svg { display: block; min-width: 820px; width: 100%; height: auto; }
+svg text { font-family: var(--body); fill: var(--ink); }
+svg .mono { font-family: var(--mono); }
+svg .muted { fill: var(--muted); }
+svg .box { fill: var(--paper); stroke: var(--line); stroke-width: 1.5; }
+svg .uno { fill: var(--uno); } svg .relay { fill: var(--relay); } svg .mos { fill: var(--mos); }
+svg .board { fill: var(--board); stroke: var(--ok); stroke-width: 1.5; }
+svg .pinlbl { font: 600 13px var(--mono); }
+svg .white { fill: #fff; }
+svg .wire { fill: none; stroke-width: 3.2; stroke-linecap: round; stroke-linejoin: round; }
+svg .dash { stroke-dasharray: 6 5; }
+svg .pad { fill: var(--accent); }
+svg .term { fill: var(--paper); stroke: var(--ink); stroke-width: 1.5; }
+svg .res { fill: #e8d5a8; stroke: #8a6a2a; stroke-width: 1.2; }
+.steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.card { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--bg); }
+.card h3 { margin: 0 0 6px; font: 600 14.5px var(--body); }
+.card ol, .card ul { margin: 0; padding-left: 18px; font-size: 14px; color: var(--muted); }
+.card li b { color: var(--ink); font-weight: 600; }
+.warn { border-left: 3px solid var(--crit); }
+.wire-key { display: inline-block; width: 22px; height: 4px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13px; color: var(--muted); }
+
+.comp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; align-items: start; }
+.comp-card { background: var(--paper); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.comp-card header { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.comp-card h3 { margin: 0; font: 600 15.5px var(--body); }
+.comp-card small { color: var(--muted); font-size: 12.5px; }
+table.mini { min-width: 0; width: 100%; }
+table.mini th, table.mini td { padding: 5px 0; border-top: 1px solid var(--line); }
+table.mini thead th { background: none; padding-top: 0; font-size: 10.5px; }
+table.mini td.cpin { font-size: 14px; }
+table.mini td.arrow { color: var(--muted); width: 28px; text-align: center; }
+table.mini td.upin { text-align: right; font: 600 14px var(--mono); }
+table.mini th:last-child { text-align: right; }
+.upin span { display: inline-block; min-width: 3.2em; padding: 2px 7px; border-radius: 5px; text-align: center; }
+.upin .sig { background: var(--accent-soft); color: var(--accent); }
+.upin .v5 { background: rgb(178 58 42 / .1); color: var(--crit); }
+.upin .v3 { background: rgb(168 116 26 / .12); color: var(--warn); }
+.upin .gnd { background: var(--bg); color: var(--muted); }
+.upin .none { color: var(--muted); font-weight: 400; }
+.cnote { margin: 0; font-size: 13px; color: var(--muted); }
+@media (max-width: 560px) { .page { padding: 18px 16px 40px; } .pumpkin { padding: 14px; } }
+</style>
+
+<div class="page">
+  <header>
+    <h1>Câblage Sentinel</h1>
+    <p>Tous les branchements de l'UNO Q « talos », d'après le programme actuellement sur la carte. Les capteurs classiques tiennent dans un tableau ; la citrouille (moteur et haut-parleur) a ses schémas détaillés plus bas.</p>
+    <div class="meta">
+      <span class="chip">Carte : Arduino UNO Q</span>
+      <span class="chip">Logique 3,3 V</span>
+      <span class="chip">Mis à jour le 8 oct. 2026</span>
+    </div>
+  </header>
+
+  <section aria-labelledby="h-table">
+    <h2 id="h-table">Branchements par composant</h2>
+    <p class="sub">Chaque carte liste tous les fils du composant, alimentation comprise. Tous les GND vont sur le même rail.</p>
+    <div class="comp-grid">
+      <article class="comp-card">
+        <header><div><h3>Écran OLED SSD1306</h3><small>0,96″ · I2C, adresse 0x3C</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">VCC</td><td class="arrow">→</td><td class="upin"><span class="v3">3V3</span></td></tr>
+<tr><td class="cpin">GND</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+<tr><td class="cpin">SDA</td><td class="arrow">→</td><td class="upin"><span class="sig">SDA</span></td></tr>
+<tr><td class="cpin">SCL</td><td class="arrow">→</td><td class="upin"><span class="sig">SCL</span></td></tr>
+        </tbody></table><p class="cnote">Luminosité réduite par le programme pour limiter le courant.</p>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>Lecteur de badge RC522</h3><small>RFID 13,56 MHz · SPI</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">3.3V</td><td class="arrow">→</td><td class="upin"><span class="v3">3V3</span></td></tr>
+<tr><td class="cpin">GND</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+<tr><td class="cpin">RST</td><td class="arrow">→</td><td class="upin"><span class="sig">D6</span></td></tr>
+<tr><td class="cpin">SDA (SS)</td><td class="arrow">→</td><td class="upin"><span class="sig">D10</span></td></tr>
+<tr><td class="cpin">MOSI</td><td class="arrow">→</td><td class="upin"><span class="sig">D11</span></td></tr>
+<tr><td class="cpin">MISO</td><td class="arrow">→</td><td class="upin"><span class="sig">D12</span></td></tr>
+<tr><td class="cpin">SCK</td><td class="arrow">→</td><td class="upin"><span class="sig">D13</span></td></tr>
+<tr><td class="cpin">IRQ</td><td class="arrow">→</td><td class="upin"><span class="none">rien</span></td></tr>
+        </tbody></table><p class="cnote">⚠️ Jamais sur 5V. « SDA » du RC522 n'a rien à voir avec l'I2C.</p>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>DHT22</h3><small>température, humidité</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">+</td><td class="arrow">→</td><td class="upin"><span class="v3">3V3</span></td></tr>
+<tr><td class="cpin">−</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+<tr><td class="cpin">DATA</td><td class="arrow">→</td><td class="upin"><span class="sig">D2</span></td></tr>
+        </tbody></table>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>Détecteur PIR HC-SR501</h3><small>présence</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">VCC</td><td class="arrow">→</td><td class="upin"><span class="v5">5V</span></td></tr>
+<tr><td class="cpin">GND</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+<tr><td class="cpin">OUT</td><td class="arrow">→</td><td class="upin"><span class="sig">D7</span></td></tr>
+        </tbody></table>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>Capteur de porte HW-201</h3><small>infrarouge, détecte la plateforme</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">VCC</td><td class="arrow">→</td><td class="upin"><span class="v3">3V3</span></td></tr>
+<tr><td class="cpin">GND</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+<tr><td class="cpin">OUT</td><td class="arrow">→</td><td class="upin"><span class="sig">D4</span></td></tr>
+        </tbody></table>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>Servo SG90</h3><small>bras de la caméra</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">rouge</td><td class="arrow">→</td><td class="upin"><span class="v5">5V</span></td></tr>
+<tr><td class="cpin">marron</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+<tr><td class="cpin">orange (signal)</td><td class="arrow">→</td><td class="upin"><span class="sig">D9</span></td></tr>
+        </tbody></table>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>ESP32-CAM</h3><small>caméra Wi-Fi, flux relayé par talos</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">5V</td><td class="arrow">→</td><td class="upin"><span class="v5">5V</span></td></tr>
+<tr><td class="cpin">GND</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+        </tbody></table><p class="cnote">Aucun fil de signal : tout passe par le Wi-Fi.</p>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>Sortie verrou</h3><small>future serrure électrique</small></div><span class="pill free">Réservée</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">commande</td><td class="arrow">→</td><td class="upin"><span class="sig">D3</span></td></tr>
+        </tbody></table><p class="cnote">Passe à 3,3 V quand le système est armé.</p>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>Condensateur 100 µF</h3><small>10 V ou plus · stabilise le 3,3 V</small></div><span class="pill todo">À ajouter</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">patte longue (+)</td><td class="arrow">→</td><td class="upin"><span class="v3">3V3</span></td></tr>
+<tr><td class="cpin">bande (−)</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+        </tbody></table><p class="cnote">Au plus près du RC522 : évite que l'écran et le lecteur se coupent.</p>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>Module relais (citrouille)</h3><small>moteur de la tête · détail plus bas</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">VCC</td><td class="arrow">→</td><td class="upin"><span class="v5">5V</span></td></tr>
+<tr><td class="cpin">GND</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+<tr><td class="cpin">IN1</td><td class="arrow">→</td><td class="upin"><span class="sig">D8</span></td></tr>
+<tr><td class="cpin">IN2</td><td class="arrow">→</td><td class="upin"><span class="sig">A2</span></td></tr>
+        </tbody></table>
+      </article>
+      <article class="comp-card">
+        <header><div><h3>Module MOS (citrouille)</h3><small>haut-parleur · détail plus bas</small></div><span class="pill ok">Branché</span></header>
+        <table class="mini"><thead><tr><th>Composant</th><th></th><th>UNO Q</th></tr></thead><tbody>
+<tr><td class="cpin">SIG</td><td class="arrow">→</td><td class="upin"><span class="sig">D5</span></td></tr>
+<tr><td class="cpin">GND (3 broches)</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+<tr><td class="cpin">VIN (bornier)</td><td class="arrow">→</td><td class="upin"><span class="v5">5V</span></td></tr>
+<tr><td class="cpin">GND (bornier)</td><td class="arrow">→</td><td class="upin"><span class="gnd">GND</span></td></tr>
+        </tbody></table>
+      </article>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-pins">
+    <h2 id="h-pins">Carte des broches</h2>
+    <p class="sub">D5, D8 et A2 sont pour la citrouille. D0, D1, A0, A1 et A3 à A5 restent libres (A0 / A1 prévues pour le capteur à ultrasons).</p>
+    <div class="pins">
+      <div class="pinbox used"><b>D2</b><span>DHT22</span></div>
+      <div class="pinbox used"><b>D3</b><span>Verrou</span></div>
+      <div class="pinbox used"><b>D4</b><span>Porte HW-201</span></div>
+      <div class="pinbox used"><b>D5</b><span>Haut-parleur · MOS</span></div>
+      <div class="pinbox used"><b>D6</b><span>RC522 RST</span></div>
+      <div class="pinbox used"><b>D7</b><span>PIR</span></div>
+      <div class="pinbox used"><b>D8</b><span>Moteur · relais IN1</span></div>
+      <div class="pinbox used"><b>D9</b><span>Servo</span></div>
+      <div class="pinbox used"><b>D10–13</b><span>RC522 SPI</span></div>
+      <div class="pinbox used"><b>SDA/SCL</b><span>OLED</span></div>
+      <div class="pinbox free"><b>A0 / A1</b><span>Ultrasons (à venir)</span></div>
+      <div class="pinbox used"><b>A2</b><span>Moteur · relais IN2</span></div>
+      <div class="pinbox free"><b>A3–A5</b><span>Libres</span></div>
+    </div>
+  </section>
+
+  <section aria-labelledby="h-rails">
+    <h2 id="h-rails">Rails d'alimentation</h2>
+    <p class="sub">Sur la breadboard, tous les GND de l'Arduino sont reliés. Le circuit des piles de la citrouille reste séparé.</p>
+    <div class="rails">
+      <div class="rail"><h3><i style="background:var(--crit)"></i>Rail 5V (Arduino)</h3><ul><li>PIR, servo, ESP32-CAM</li><li>Module relais (VCC)</li><li>Module MOS (VIN)</li></ul></div>
+      <div class="rail"><h3><i style="background:var(--warn)"></i>Rail 3,3 V (Arduino)</h3><ul><li>OLED, DHT22, RC522, HW-201</li><li>Environ 50 mA en tout</li></ul></div>
+      <div class="rail"><h3><i style="background:var(--ok)"></i>Piles de la citrouille (4,5 V)</h3><ul><li>Moteur uniquement, via les 2 relais</li><li><b>Jamais</b> relié au GND de l'Arduino</li></ul></div>
+    </div>
+  </section>
+
+  <section class="pumpkin" aria-labelledby="h-motor">
+    <h2 id="h-motor">Citrouille · moteur, deux sens <em>D8 + A2 → pont en H (2 relais) → piles</em></h2>
+    <p class="sub" style="margin:0">Chaque fil du moteur va sur le COM d'un relais. Au repos, les deux COM sont au − des piles : le moteur est arrêté. Activer le relais 1 fait tourner la tête dans un sens, le relais 2 dans l'autre. Le courant vient uniquement des piles de la citrouille.</p>
+    <div class="legend">
+      <span><i class="wire-key" style="background:var(--w-red)"></i>5V / + piles</span>
+      <span><i class="wire-key" style="background:var(--w-black)"></i>GND / − piles</span>
+      <span><i class="wire-key" style="background:var(--w-yellow)"></i>signal D8</span>
+      <span><i class="wire-key" style="background:var(--w-orange)"></i>signal A2</span>
+      <span><i class="wire-key" style="background:var(--w-green)"></i>fil vert du moteur</span>
+      <span><i class="wire-key" style="background:var(--w-blue)"></i>fil − du moteur</span>
+    </div>
+    <div class="schema">
+      <svg viewBox="0 0 960 500" role="img" aria-label="Pont en H : UNO Q vers le connecteur du relais, bornier vis 1 à 6 vers les piles et le moteur">
+        <!-- UNO Q -->
+        <rect x="20" y="90" width="150" height="230" rx="10" class="uno"/>
+        <text x="95" y="118" text-anchor="middle" class="white" style="font-weight:600">UNO Q</text>
+        <g class="pinlbl">
+          <text x="150" y="165" text-anchor="end" class="white">5V</text>
+          <text x="150" y="205" text-anchor="end" class="white">GND</text>
+          <text x="150" y="245" text-anchor="end" class="white">D8</text>
+          <text x="150" y="285" text-anchor="end" class="white">A2</text>
+        </g>
+        <circle cx="170" cy="160" r="5" class="pad"/><circle cx="170" cy="200" r="5" class="pad"/>
+        <circle cx="170" cy="240" r="5" class="pad"/><circle cx="170" cy="280" r="5" class="pad"/>
+
+        <!-- Module relais -->
+        <rect x="320" y="40" width="280" height="420" rx="10" class="relay"/>
+        <text x="460" y="66" text-anchor="middle" class="white" style="font-weight:600">Module relais bleu</text>
+        <rect x="320" y="138" width="78" height="164" rx="4" fill="rgba(0,0,0,.25)"/>
+        <g class="pinlbl">
+          <text x="332" y="165" class="white">VCC</text>
+          <text x="332" y="205" class="white">GND</text>
+          <text x="332" y="245" class="white">IN1</text>
+          <text x="332" y="285" class="white">IN2</text>
+        </g>
+        <circle cx="320" cy="160" r="5" class="pad"/><circle cx="320" cy="200" r="5" class="pad"/>
+        <circle cx="320" cy="240" r="5" class="pad"/><circle cx="320" cy="280" r="5" class="pad"/>
+        <text x="410" y="430" class="white" style="font-size:12px">cavalier RY-VCC ═ VCC : en place</text>
+        <!-- relais 2 (haut) -->
+        <rect x="412" y="96" width="118" height="128" rx="6" fill="rgba(255,255,255,.12)"/>
+        <text x="471" y="120" text-anchor="middle" class="white" style="font-weight:600;font-size:13px">Relais 2 · haut</text>
+        <text x="471" y="138" text-anchor="middle" class="white" style="font-size:11.5px;opacity:.85">commandé par IN2</text>
+        <!-- relais 1 (bas) -->
+        <rect x="412" y="266" width="118" height="128" rx="6" fill="rgba(255,255,255,.12)"/>
+        <text x="471" y="290" text-anchor="middle" class="white" style="font-weight:600;font-size:13px">Relais 1 · bas</text>
+        <text x="471" y="308" text-anchor="middle" class="white" style="font-size:11.5px;opacity:.85">commandé par IN1</text>
+        <!-- bornier -->
+        <rect x="566" y="100" width="34" height="290" rx="4" fill="rgba(255,255,255,.2)"/>
+        <circle cx="600" cy="120" r="7" class="term"/><circle cx="600" cy="160" r="7" class="term"/><circle cx="600" cy="200" r="7" class="term"/>
+        <circle cx="600" cy="290" r="7" class="term"/><circle cx="600" cy="330" r="7" class="term"/><circle cx="600" cy="370" r="7" class="term"/>
+        <g class="mono" style="font-size:12px;font-weight:600" text-anchor="end">
+          <text x="585" y="124" class="white">1 NO</text><text x="585" y="164" class="white">2 COM</text><text x="585" y="204" class="white">3 NC</text>
+          <text x="585" y="294" class="white">4 NO</text><text x="585" y="334" class="white">5 COM</text><text x="585" y="374" class="white">6 NC</text>
+        </g>
+
+        <!-- fils Arduino → connecteur -->
+        <path class="wire" stroke="var(--w-red)" d="M175 160 H315"/>
+        <path class="wire" stroke="var(--w-black)" d="M175 200 H315"/>
+        <path class="wire" stroke="var(--w-yellow)" d="M175 240 H315"/>
+        <path class="wire" stroke="var(--w-orange)" d="M175 280 H315"/>
+
+        <!-- piles -->
+        <rect x="760" y="34" width="180" height="96" rx="10" class="board"/>
+        <text x="850" y="58" text-anchor="middle" style="font-weight:600">Piles citrouille</text>
+        <text x="850" y="76" text-anchor="middle" class="muted" style="font-size:12px">3 × AA · 4,5 V</text>
+        <circle cx="760" cy="96" r="6" class="pad"/><text x="774" y="101" class="pinlbl">+ (rouge)</text>
+        <circle cx="760" cy="118" r="6" class="pad"/><text x="774" y="123" class="pinlbl">− (noir)</text>
+
+        <!-- moteur -->
+        <circle cx="850" cy="410" r="46" class="box" stroke="var(--ink)"/>
+        <text x="850" y="418" text-anchor="middle" style="font: 800 24px var(--display)">M</text>
+        <circle cx="804" cy="410" r="5" class="pad"/><text x="796" y="448" text-anchor="end" class="pinlbl" fill="var(--w-green)">vert</text>
+        <circle cx="896" cy="410" r="5" class="pad"/><text x="904" y="448" class="pinlbl" fill="var(--w-blue)">−</text>
+
+        <!-- + piles → vis 4, pont 4 → 1 -->
+        <path class="wire" stroke="var(--w-red)" d="M754 96 H720 V290 H607"/>
+        <path class="wire dash" stroke="var(--w-red)" d="M607 286 C 668 286, 668 124, 607 124"/>
+        <!-- − piles → vis 6, pont 6 → 3 -->
+        <path class="wire" stroke="var(--w-black)" d="M754 118 H690 V370 H607"/>
+        <path class="wire dash" stroke="var(--w-black)" d="M607 366 C 652 366, 652 204, 607 204"/>
+        <!-- moteur -->
+        <path class="wire" stroke="var(--w-green)" d="M607 330 H750 V410 H798"/>
+        <path class="wire" stroke="var(--w-blue)" d="M607 160 H948 V410 H902"/>
+        <g class="mono muted" style="font-size:11.5px">
+          <text x="676" y="210">pont 4→1</text>
+          <text x="636" y="262">pont 6→3</text>
+        </g>
+      </svg>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Vis</th><th>Rôle</th><th>Branché sur</th><th>Remarque</th></tr></thead>
+        <tbody>
+          <tr><td class="pin"><span>1</span></td><td>NO · relais 2</td><td>+ piles</td><td class="note">Fil de pont depuis la vis 4</td></tr>
+          <tr><td class="pin"><span>2</span></td><td>COM · relais 2</td><td>Fil − du moteur</td><td class="note">Ne va plus directement aux piles</td></tr>
+          <tr><td class="pin"><span>3</span></td><td>NC · relais 2</td><td>− piles</td><td class="note">Fil de pont depuis la vis 6</td></tr>
+          <tr><td class="pin"><span>4</span></td><td>NO · relais 1</td><td>+ piles (fil rouge)</td><td class="note">Le rouge quitte la vis 5 et vient ici</td></tr>
+          <tr><td class="pin"><span>5</span></td><td>COM · relais 1</td><td>Fil vert du moteur</td><td class="note">Le vert quitte la vis 4 et vient ici</td></tr>
+          <tr><td class="pin"><span>6</span></td><td>NC · relais 1</td><td>− piles (fil noir, lamelle −)</td><td class="note">—</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Connecteur à 4 broches</th><th>UNO Q</th><th>Remarque</th></tr></thead>
+        <tbody>
+          <tr><td class="pin"><span>VCC</span></td><td>5V</td><td class="note">—</td></tr>
+          <tr><td class="pin"><span>GND</span></td><td>GND</td><td class="note">—</td></tr>
+          <tr><td class="pin"><span>IN1</span></td><td>D8</td><td class="note">Relais 1 (bas)</td></tr>
+          <tr><td class="pin"><span>IN2</span></td><td>A2</td><td class="note">Relais 2 (haut) · nouveau fil</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="steps-grid">
+      <div class="card">
+        <h3>Ce que font les relais</h3>
+        <ul>
+          <li>Les deux au repos : <b>arrêt</b>, moteur freiné.</li>
+          <li>Relais 1 seul (D8) : <b>tourne dans un sens</b>.</li>
+          <li>Relais 2 seul (A2) : <b>tourne dans l'autre sens</b>.</li>
+          <li>Les deux activés : arrêt. Aucun court-circuit possible, et le programme ne le fait jamais.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Dans l'ordre</h3>
+        <ol>
+          <li><b>Inversez</b> le rouge (vers la vis 4) et le vert (vers la vis 5).</li>
+          <li>Pont <b>vis 4 → vis 1</b>.</li>
+          <li><b>− piles</b> (noir) en vis 6, pont <b>vis 6 → vis 3</b>.</li>
+          <li><b>Fil − du moteur</b> en vis 2.</li>
+          <li><b>IN2 → A2</b> de l'UNO Q.</li>
+        </ol>
+      </div>
+      <div class="card warn">
+        <h3>Avant de souder</h3>
+        <ul>
+          <li>Faites tourner le moteur et regardez la tête : si elle <b>revient toute seule</b> alors que le moteur tourne toujours dans le même sens, c'est une came, et inverser le moteur ne suffira pas.</li>
+          <li>Un pont : un fil de 5 cm dénudé aux deux bouts, serré avec l'autre fil sous la même vis.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="pumpkin" aria-labelledby="h-spk">
+    <h2 id="h-spk">Citrouille · haut-parleur <em>D5 → module MOS → 4 × 100 Ω → HP</em></h2>
+    <p class="sub" style="margin:0">Le haut-parleur de la citrouille ne supporte que <b>0,25 W (8 Ω)</b>. Les résistances limitent le courant ; sans elles, il grille en quelques minutes de sirène.</p>
+    <div class="legend">
+      <span><i class="wire-key" style="background:var(--w-red)"></i>5V</span>
+      <span><i class="wire-key" style="background:var(--w-black)"></i>GND Arduino</span>
+      <span><i class="wire-key" style="background:var(--w-yellow)"></i>signal D5</span>
+      <span><i class="wire-key" style="background:var(--w-white)"></i>fils blancs du haut-parleur</span>
+    </div>
+    <div class="schema">
+      <svg viewBox="0 0 940 380" role="img" aria-label="Schéma du haut-parleur : UNO Q vers module MOS, puis quatre résistances de 100 ohms en parallèle vers le haut-parleur">
+        <rect x="20" y="60" width="150" height="250" rx="10" class="uno"/>
+        <text x="95" y="88" text-anchor="middle" class="white" style="font-weight:600">UNO Q</text>
+        <g class="pinlbl">
+          <text x="150" y="136" text-anchor="end" class="white">D5</text>
+          <text x="150" y="176" text-anchor="end" class="white">GND</text>
+          <text x="150" y="236" text-anchor="end" class="white">5V</text>
+          <text x="150" y="276" text-anchor="end" class="white">GND</text>
+        </g>
+        <circle cx="170" cy="131" r="5" class="pad"/><circle cx="170" cy="171" r="5" class="pad"/>
+        <circle cx="170" cy="231" r="5" class="pad"/><circle cx="170" cy="271" r="5" class="pad"/>
+
+        <rect x="330" y="40" width="210" height="300" rx="10" class="mos"/>
+        <text x="435" y="66" text-anchor="middle" class="white" style="font-weight:600">Module MOS rouge</text>
+        <text x="342" y="98" class="white" style="font-size:11.5px;opacity:.8">3 broches</text>
+        <g class="pinlbl">
+          <text x="342" y="136" class="white">SIG</text>
+          <text x="342" y="176" class="white">GND</text>
+          <text x="342" y="196" class="white" style="opacity:.6;font-size:11px">VCC · rien</text>
+          <text x="342" y="236" class="white">VIN</text>
+          <text x="342" y="276" class="white">GND</text>
+        </g>
+        <text x="342" y="214" class="white" style="font-size:11.5px;opacity:.8">bornier alim.</text>
+        <circle cx="330" cy="131" r="5" class="pad"/><circle cx="330" cy="171" r="5" class="pad"/>
+        <circle cx="330" cy="231" r="7" class="term"/><circle cx="330" cy="271" r="7" class="term"/>
+        <text x="528" y="140" text-anchor="end" class="white" style="font-size:11.5px;opacity:.8">bornier sortie</text>
+        <g class="pinlbl"><text x="528" y="176" text-anchor="end" class="white">V+</text><text x="528" y="276" text-anchor="end" class="white">V−</text></g>
+        <circle cx="540" cy="171" r="7" class="term"/><circle cx="540" cy="271" r="7" class="term"/>
+
+        <path class="wire" stroke="var(--w-yellow)" d="M175 131 H325"/>
+        <path class="wire" stroke="var(--w-black)" d="M175 171 H325"/>
+        <path class="wire" stroke="var(--w-red)" d="M175 231 H322"/>
+        <path class="wire" stroke="var(--w-black)" d="M175 271 H322"/>
+
+        <!-- résistances en parallèle -->
+        <path class="wire" stroke="var(--w-white)" d="M548 171 H600"/>
+        <path class="wire" stroke="var(--ink)" style="stroke-width:2" d="M600 120 V230 M720 120 V230"/>
+        <g>
+          <path class="wire" stroke="var(--ink)" style="stroke-width:2" d="M600 125 H630 M690 125 H720 M600 160 H630 M690 160 H720 M600 195 H630 M690 195 H720 M600 230 H630 M690 230 H720"/>
+          <rect x="630" y="116" width="60" height="18" rx="5" class="res"/><rect x="630" y="151" width="60" height="18" rx="5" class="res"/>
+          <rect x="630" y="186" width="60" height="18" rx="5" class="res"/><rect x="630" y="221" width="60" height="18" rx="5" class="res"/>
+          <g class="mono" style="font-size:11px" text-anchor="middle" fill="#3b2a08"><text x="660" y="129">100 Ω</text><text x="660" y="164">100 Ω</text><text x="660" y="199">100 Ω</text><text x="660" y="234">100 Ω</text></g>
+        </g>
+        <text x="660" y="104" text-anchor="middle" class="muted" style="font-size:12px">4 en parallèle = 25 Ω, 1 W</text>
+
+        <!-- haut-parleur -->
+        <path d="M820 190 h22 l34 -40 v120 l-34 -40 h-22 z" class="box" stroke="var(--ink)"/>
+        <text x="850" y="300" text-anchor="middle" style="font-weight:600">HP citrouille</text>
+        <text x="850" y="318" text-anchor="middle" class="muted mono" style="font-size:12px">8 Ω · 0,25 W</text>
+        <path class="wire" stroke="var(--w-white)" d="M720 175 H780 V200 H818"/>
+        <path class="wire" stroke="var(--w-white)" d="M548 271 H780 V218 H818"/>
+        <text x="760" y="166" class="mono muted" style="font-size:12px">fil blanc 1</text>
+        <text x="600" y="292" class="mono muted" style="font-size:12px">fil blanc 2</text>
+      </svg>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Fil</th><th>De</th><th>Vers</th><th>Comment</th></tr></thead>
+        <tbody>
+          <tr><td class="pin"><span>1</span></td><td>D5 de l'UNO Q</td><td>SIG du module MOS</td><td class="note">Dupont</td></tr>
+          <tr><td class="pin"><span>2</span></td><td>GND de l'UNO Q</td><td>GND des 3 broches</td><td class="note">Dupont · VCC des 3 broches reste vide</td></tr>
+          <tr><td class="pin"><span>3</span></td><td>5V de l'UNO Q</td><td>VIN du bornier</td><td class="note">Vissé</td></tr>
+          <tr><td class="pin"><span>4</span></td><td>GND de l'UNO Q</td><td>GND du bornier</td><td class="note">Vissé</td></tr>
+          <tr><td class="pin"><span>5</span></td><td>V+ du bornier</td><td>Groupe de 4 résistances de 100 Ω</td><td class="note">Pattes torsadées et soudées</td></tr>
+          <tr><td class="pin"><span>6</span></td><td>Autre bout des résistances</td><td>Fil blanc 1 du haut-parleur</td><td class="note">Dessoudé de la carte de la citrouille</td></tr>
+          <tr><td class="pin"><span>7</span></td><td>Fil blanc 2 du haut-parleur</td><td>V− du bornier</td><td class="note">Pas de sens à respecter</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="steps-grid">
+      <div class="card">
+        <h3>Autres valeurs de résistance</h3>
+        <ul>
+          <li><b>2 × 47 Ω</b> en parallèle → 23,5 Ω (alarmes courtes)</li>
+          <li><b>2 × 10 Ω</b> en série → 20 Ω (alarmes courtes)</li>
+          <li><b>4 × 22 Ω</b> : 2 en série, doublées en parallèle → 22 Ω, 1 W</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Lire une résistance de 100 Ω</h3>
+        <ul>
+          <li>5 anneaux : <b>marron · noir · noir · noir · marron</b></li>
+          <li>47 Ω : jaune · violet · noir · or · marron</li>
+          <li>En cas de doute : multimètre, calibre 200 Ω</li>
+        </ul>
+      </div>
+      <div class="card warn">
+        <h3>Sans résistance</h3>
+        <ul>
+          <li>Utilisez votre <b>haut-parleur noir</b> à la place : il supporte des tests courts.</li>
+          <li><b>Jamais</b> le haut-parleur de la citrouille en direct sur V+ / V−.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>

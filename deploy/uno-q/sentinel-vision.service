@@ -1,0 +1,14 @@
+[Unit]
+Description=Sentinel vision (mouvement, suivi servo, reconnaissance faciale)
+After=network-online.target sensor-api.service
+
+[Service]
+WorkingDirectory=%h/sentinel/vision
+ExecStart=%h/sentinel/vision/.venv/bin/python -m vision
+Restart=always
+RestartSec=5
+# La vision ne doit pas ralentir l'API capteurs ni le backend.
+Nice=5
+
+[Install]
+WantedBy=default.target

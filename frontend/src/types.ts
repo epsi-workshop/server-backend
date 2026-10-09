@@ -124,6 +124,26 @@ export interface BadgeEnrollState {
   owner: string | null;
 }
 
+/** Enceinte Bluetooth de l'UNO Q. */
+export interface AudioState {
+  speaker: { mac: string; name: string | null; connected: boolean } | null;
+  /** Enceinte connectée et prête à jouer (sortie audio créée). */
+  ready: boolean;
+  volume: number;
+  sounds: string[];
+}
+
+export interface BluetoothDevice {
+  mac: string;
+  name: string;
+  paired: boolean;
+  connected: boolean;
+  /** Appareil capable de jouer du son (enceinte, casque). */
+  audio: boolean;
+}
+
+export type TestSound = "test" | "ok" | "refused" | "hello" | "siren";
+
 export interface Badge {
   id: string;
   uid: string;

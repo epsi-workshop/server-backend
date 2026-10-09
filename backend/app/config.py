@@ -17,6 +17,9 @@ class Config(BaseSettings):
     database_url: str = "postgresql+asyncpg://sentinel:sentinel@localhost:5432/sentinel"
     # Origines acceptées pour les requêtes modifiantes et le WebSocket, séparées par des virgules.
     allowed_origins: str = "https://192.168.50.10,https://sentinel.lan"
+    # Accepte aussi une origine identique à l'hôte demandé (même origine, donc pas de CSRF possible) :
+    # utile sur le boîtier, joignable par talos.local ou par une IP qui change selon le réseau.
+    allow_same_origin: bool = False
     cookie_secure: bool = True
     session_ttl_hours: int = 12
     expose_docs: bool = False
@@ -57,6 +60,12 @@ class Config(BaseSettings):
     @property
     def origins(self) -> set[str]:
         return {o.strip().rstrip("/") for o in self.allowed_origins.split(",") if o.strip()}
+
+    def origin_allowed(self, origin: str, host: str | None) -> bool:
+        origin = origin.rstrip("/")
+        if origin in self.origins:
+            return True
+        return self.allow_same_origin and bool(host) and origin.split("://", 1)[-1] == host
 
 
 config = Config()

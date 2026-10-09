@@ -23,7 +23,7 @@ function Guard({ min, children }: { min: Role; children: ReactNode }) {
 
 function Gate() {
   const { user, loading } = useAuth();
-  if (loading) return <div className="login"><div className="boot"><Logo3DSlot className="boot-logo" /><p className="boot-text">Germination du système</p></div></div>;
+  if (loading) return <div className="login"><div className="boot"><Logo3DSlot className="boot-logo" /><p className="boot-text">Démarrage du système</p></div></div>;
   if (!user) return <Login />;
   if (user.mustChangePassword) return <ChangePassword forced />;
   return (

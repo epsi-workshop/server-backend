@@ -469,3 +469,18 @@ textarea { resize: vertical; }
 .badge-reader.is-listening { border-style: solid; border-color: var(--accent); }
 .badge-reader.is-listening .badge-reader-icon { animation: face-pulse 1.2s ease-in-out infinite; }
 @media (max-width: 560px) { .badge-reader { flex-wrap: wrap; } }
+
+/* ---------------------------------------------------------------- son : enceinte Bluetooth */
+.speaker-state { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.speaker-state > div:first-of-type { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 200px; }
+.speaker-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; flex: none; background: var(--surface-2); color: var(--muted); }
+.speaker-icon.is-on { background: var(--ok-bg); color: var(--ok); }
+.speaker-actions { display: flex; gap: 8px; align-items: center; }
+.volume-field { margin-top: 18px; max-width: 420px; }
+.volume-field input[type="range"] { width: 100%; accent-color: var(--accent); }
+.sound-tests { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.sound-tests .btn { display: inline-flex; align-items: center; gap: 6px; }
+.bt-list { list-style: none; margin: 12px 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.bt-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface-2); }
+.bt-list li > div { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.bt-list li.is-other { opacity: .6; }

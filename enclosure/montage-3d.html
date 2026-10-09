@@ -1,0 +1,579 @@
+<title>Montage du pot Sentinel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout : établi — la maquette 3D occupe la gauche (collante), la notice de montage défile à droite. */
+:root {
+  --bg: #e9ede9;
+  --panel: #f7f9f7;
+  --ink: #1b221e;
+  --muted: #5d6a62;
+  --line: #cfd8d1;
+  --accent: #4f7a55;
+  --accent-soft: rgb(79 122 85 / .12);
+  --samse: #9a6a1f;
+  --action: #2f6d8f;
+  --deja: #6a6f74;
+  --web: #8a4f7d;
+  --stage: #dfe5e0;
+  --display: "Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121614; --panel: #19201c; --ink: #e4ebe6; --muted: #93a198; --line: #2b352f;
+    --accent: #8dbb92; --accent-soft: rgb(141 187 146 / .14);
+    --samse: #d8a65a; --action: #77b6d8; --deja: #a3a9ae; --web: #cf93c1; --stage: #0e1210;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121614; --panel: #19201c; --ink: #e4ebe6; --muted: #93a198; --line: #2b352f;
+  --accent: #8dbb92; --accent-soft: rgb(141 187 146 / .14);
+  --samse: #d8a65a; --action: #77b6d8; --deja: #a3a9ae; --web: #cf93c1; --stage: #0e1210;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 var(--body); }
+.wrap { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr); gap: 20px; padding: 20px; max-width: 1500px; margin: 0 auto; min-height: 100%; }
+.stage {
+  position: sticky; top: calc(20px + env(safe-area-inset-top, 0px)); height: calc(100vh - 40px); min-height: 460px;
+  border-radius: 14px; overflow: hidden; background: var(--stage); border: 1px solid var(--line);
+}
+#view { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+#view:active { cursor: grabbing; }
+.hud { position: absolute; left: 14px; right: 14px; top: 14px; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+.hud > * { pointer-events: auto; }
+.chip-btn {
+  font: 500 13px/1 var(--body); color: var(--ink); background: var(--panel); border: 1px solid var(--line);
+  padding: 9px 12px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+}
+.chip-btn[aria-pressed="true"] { background: var(--ink); color: var(--panel); border-color: var(--ink); }
+.chip-btn:focus-visible, .step:focus-visible, .part:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.tip {
+  position: absolute; pointer-events: none; background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+  font: 500 12.5px/1.3 var(--body); padding: 6px 9px; border-radius: 8px; transform: translate(-50%, -130%); white-space: nowrap;
+}
+.scale { position: absolute; left: 14px; bottom: 12px; font: 12px var(--mono); color: var(--muted); }
+.hint { position: absolute; right: 14px; bottom: 12px; font: 12px var(--body); color: var(--muted); }
+
+.notice { display: flex; flex-direction: column; gap: 22px; min-width: 0; padding-block: 4px 40px; }
+header h1 { font: 700 clamp(28px, 3.4vw, 40px)/1.05 var(--display); letter-spacing: -.01em; margin: 0 0 8px; text-wrap: balance; }
+header p { margin: 0; color: var(--muted); max-width: 60ch; }
+.dims { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font: 13px var(--mono); color: var(--muted); }
+.dims b { color: var(--ink); font-weight: 500; }
+h2 { font: 600 12px/1 var(--body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+
+.steps { display: flex; flex-direction: column; gap: 8px; }
+.step {
+  text-align: left; width: 100%; font: inherit; color: inherit; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 12px 14px; cursor: pointer; display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 12px;
+}
+.step .n { font: 700 18px/30px var(--display); text-align: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.step strong { display: block; font-weight: 600; }
+.step span.d { display: block; color: var(--muted); font-size: 14px; }
+.step.is-on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.step.is-on .n { background: var(--accent); color: var(--panel); }
+.step-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.parts { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: var(--panel); }
+.part { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); cursor: default; }
+.part:first-child { border-top: 0; }
+.part:hover, .part.is-hot { background: var(--accent-soft); }
+.part .q { font: 12.5px var(--mono); color: var(--muted); }
+.tag { font: 600 11px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; padding: 4px 7px; border-radius: 5px; border: 1px solid currentColor; }
+.tag.samse { color: var(--samse); } .tag.action { color: var(--action); } .tag.deja { color: var(--deja); } .tag.web { color: var(--web); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.note { font-size: 14px; color: var(--muted); max-width: 62ch; }
+.note b { color: var(--ink); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .wrap { grid-template-columns: minmax(0, 1fr); padding: 12px 16px; }
+  .stage { position: relative; top: 0; height: 62vh; min-height: 360px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <section class="stage" aria-label="Maquette 3D du pot">
+    <canvas id="view" aria-label="Pot de fleur en coupe avec l'électronique à l'intérieur. Glisser pour tourner, molette ou pincement pour zoomer."></canvas>
+    <div class="hud">
+      <button class="chip-btn" id="btn-cut" aria-pressed="true">Coupe</button>
+      <button class="chip-btn" id="btn-explode" aria-pressed="false">Vue éclatée</button>
+      <button class="chip-btn" id="btn-sweep" aria-pressed="true">Balayage caméra</button>
+      <button class="chip-btn" id="btn-spin" aria-pressed="false">Rotation</button>
+      <button class="chip-btn" id="btn-reset">Recentrer</button>
+    </div>
+    <div class="tip" id="tip" hidden></div>
+    <div class="scale">Cotes en mm · pot Ø 230 × 230</div>
+    <div class="hint">Survolez une pièce pour son nom</div>
+  </section>
+
+  <main class="notice">
+    <header>
+      <h1>Montage du pot Sentinel</h1>
+      <p>Un pilier central porte la plateforme végétale et le servo. Le bras du servo sort par une fenêtre du pilier et fait tourner la caméra dans l'anneau entre la plateforme et le bord du pot.</p>
+      <div class="dims">
+        <span>Pot <b>Ø 230 × 230</b></span>
+        <span>Pilier <b>Ø 50 × 185</b></span>
+        <span>Anneau caméra <b>34 mm</b></span>
+        <span>Balayage <b>180°</b></span>
+      </div>
+    </header>
+
+    <section aria-labelledby="h-steps">
+      <h2 id="h-steps">Étapes de montage</h2>
+      <div class="steps" id="steps"></div>
+      <div class="step-nav" style="margin-top:10px">
+        <button class="chip-btn" id="prev">← Étape précédente</button>
+        <button class="chip-btn" id="next">Étape suivante →</button>
+        <button class="chip-btn" id="all">Tout afficher</button>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-parts">
+      <h2 id="h-parts">Pièces de la maquette</h2>
+      <ul class="parts" id="parts"></ul>
+      <div class="legend">
+        <span class="tag samse">Samse</span><span class="tag action">Action</span><span class="tag deja">Déjà là</span><span class="tag web">À commander</span>
+      </div>
+    </section>
+
+    <section aria-labelledby="h-tips">
+      <h2 id="h-tips">Points d'attention</h2>
+      <p class="note"><b>Anneau de la caméra.</b> L'ESP32-CAM fait 27 × 40 mm et environ 12 mm d'épaisseur : il faut au moins 30 mm entre le bord de la soucoupe et la paroi. Choisissez la soucoupe 6 à 8 cm plus petite que le diamètre intérieur du pot.</p>
+      <p class="note"><b>Balayage de 180°.</b> Le SG90 ne tourne que sur un demi-tour : la caméra couvre l'avant du pot, d'où la fenêtre sur la moitié avant du pilier. Pour un tour complet, il faudrait un moteur pas à pas 28BYJ-48 et un capteur de position.</p>
+      <p class="note"><b>Badge.</b> Le lecteur RC522 se colle contre la paroi intérieure : il lit à travers 2 à 3 mm de plastique. Marquez la zone à l'extérieur avec un petit autocollant.</p>
+      <p class="note"><b>Porte.</b> Le capteur HW-201, fixé sous la plateforme, regarde le fond du pot : pilier soulevé = porte ouverte sur le dashboard.</p>
+    </section>
+  </main>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script>
+(() => {
+  const canvas = document.getElementById("view");
+  const stage = canvas.parentElement;
+  const tip = document.getElementById("tip");
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const dark = () => {
+    const t = document.documentElement.dataset.theme;
+    return t ? t === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  renderer.localClippingEnabled = true;
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(32, 1, 5, 5000);
+  const controls = new THREE.OrbitControls(camera, canvas);
+  controls.enableDamping = true;
+  controls.minDistance = 250; controls.maxDistance = 1500;
+  controls.maxPolarAngle = Math.PI * 0.62;
+  const HOME = { pos: new THREE.Vector3(480, 440, 650), target: new THREE.Vector3(0, 125, 0) };
+  const home = () => { camera.position.copy(HOME.pos); controls.target.copy(HOME.target); controls.update(); };
+  home();
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x8a948c, 0.85));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  sun.position.set(300, 600, 400);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  Object.assign(sun.shadow.camera, { left: -300, right: 300, top: 300, bottom: -300, near: 100, far: 1500 });
+  scene.add(sun);
+  const fill = new THREE.DirectionalLight(0xdfe8ff, 0.35);
+  fill.position.set(-400, 200, -300);
+  scene.add(fill);
+
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(900, 64), new THREE.ShadowMaterial({ opacity: 0.18 }));
+  ground.rotation.x = -Math.PI / 2; ground.position.y = -0.5; ground.receiveShadow = true;
+  scene.add(ground);
+
+  // ------------------------------------------------------------ géométrie (mm)
+  // Pot cylindrique ; pilier central (tube PVC) ; plateforme en coupelle en haut ;
+  // bras sur le servo du pilier : la caméra tourne dans l'anneau entre la plateforme et la paroi.
+  const R_POT = 115, WALL = 3, H = 230;
+  const R_IN = R_POT - WALL;
+  const deg = (d) => d * Math.PI / 180;
+  // angle θ mesuré depuis l'avant (+z) vers la droite (+x)
+  const onWall = (theta, y, extra = 0) => {
+    const r = R_POT + extra;
+    return new THREE.Vector3(r * Math.sin(deg(theta)), y, r * Math.cos(deg(theta)));
+  };
+
+  const cutA = new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0);   // garde x < 0 …
+  const cutB = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0);   // … ou z < 0 : quart avant-droit retiré
+  const clips = [cutA, cutB];
+
+  const mat = (color, o = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0, ...o });
+  const M = {
+    pot: mat(0xf4f4f1, { roughness: 0.82, side: THREE.DoubleSide }),
+    hole: mat(0x2a2f2c, { roughness: 1 }),
+    pvc: mat(0xe9eae6, { roughness: 0.6, side: THREE.DoubleSide }),
+    cup: mat(0xeceee9, { roughness: 0.75, side: THREE.DoubleSide }),
+    moss: mat(0x5d7f48, { roughness: 1 }),
+    leaf: mat(0x4f8a4f, { roughness: 0.6, side: THREE.DoubleSide }),
+    plate: mat(0xf2f2ef, { roughness: 0.7 }),
+    steel: mat(0xa9adb1, { metalness: 0.85, roughness: 0.35 }),
+    alu: mat(0xc9ccce, { metalness: 0.8, roughness: 0.3 }),
+    pcbBlue: mat(0x1f5fa8, { roughness: 0.5 }),
+    pcbGreen: mat(0x1f6b45, { roughness: 0.5 }),
+    pcbRed: mat(0xb8322e, { roughness: 0.5 }),
+    pcbBlack: mat(0x222426, { roughness: 0.5 }),
+    bread: mat(0xf1efe6, { roughness: 0.8 }),
+    servo: mat(0x2b5fb8, { roughness: 0.45 }),
+    white: mat(0xfafafa, { roughness: 0.4 }),
+    dark: mat(0x161819, { roughness: 0.4 }),
+    lens: mat(0x0b0d10, { roughness: 0.1, metalness: 0.4 }),
+    gold: mat(0xc9a24a, { metalness: 0.9, roughness: 0.3 }),
+    cable: mat(0x2c2c2c, { roughness: 0.6 }),
+    red: mat(0xc0392b), orange: mat(0xe08a2e), yellow: mat(0xe0c23a),
+  };
+
+  const parts = [];           // { id, name, step, store, qty, group, explode }
+  const pickables = [];
+  function part(id, name, step, store, qty, explode = [0, 0, 0]) {
+    const g = new THREE.Group();
+    g.userData = { id };
+    scene.add(g);
+    const p = { id, name, step, store, qty, group: g, explode: new THREE.Vector3(...explode), mats: new Set() };
+    parts.push(p);
+    return p;
+  }
+  function add(p, geo, material, pos = [0, 0, 0], rot = [0, 0, 0], shadow = true, parent = null) {
+    const m = new THREE.Mesh(geo, material.clone());
+    m.position.set(...pos); m.rotation.set(...rot);
+    m.castShadow = shadow; m.receiveShadow = true;
+    m.userData.part = p.id;
+    (parent || p.group).add(m); pickables.push(m); p.mats.add(m.material);
+    return m;
+  }
+  function clipped(m) {
+    m.material.clippingPlanes = clips; m.material.clipIntersection = true;
+    return m;
+  }
+  const box = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+  const cyl = (r1, r2, h, s = 32) => new THREE.CylinderGeometry(r1, r2, h, s);
+  const ring = (rOut, rIn, h, s = 96, start = 0, len = Math.PI * 2) => {
+    const pts = [[rIn, 0], [rOut, 0], [rOut, h], [rIn, h], [rIn, 0]].map(([x, y]) => new THREE.Vector2(x, y));
+    return new THREE.LatheGeometry(pts, s, start, len);
+  };
+
+  // ---- 1. Pot cylindrique (paroi + fond), trous
+  const potP = part("pot", "Pot cylindrique blanc Ø 230 × 230", 1, "action", "1", [0, -30, 0]);
+  clipped(add(potP, ring(R_POT, R_IN, H, 128), M.pot));
+  clipped(add(potP, cyl(R_IN, R_IN, 4, 96), M.pot, [0, 2, 0]));
+  {
+    const holeDisc = (theta, y, r) => {
+      const d = add(potP, new THREE.CircleGeometry(r, 32), M.hole, [0, 0, 0], [0, 0, 0], false);
+      d.position.copy(onWall(theta, y, 0.6)); d.lookAt(onWall(theta, y, 50));
+    };
+    holeDisc(-35 - 6.5, 55, 8); holeDisc(-35 + 6.5, 55, 8);   // ultrasons
+    holeDisc(-35, 100, 11.5);                                  // PIR
+    holeDisc(160, 22, 7);                                      // câble
+    for (let i = 0; i < 9; i++) holeDisc(-110 + (i % 3 - 1) * 4.5, 80 + Math.floor(i / 3) * 4.5 - 4.5, 1.6);
+    const win = add(potP, new THREE.PlaneGeometry(26, 15), M.hole, [0, 0, 0], [0, 0, 0], false);
+    win.position.copy(onWall(180, 120, 0.6)); win.lookAt(onWall(180, 120, 50));
+  }
+
+  // ---- 2. Socle + électronique autour du pilier
+  const Y0 = 9;
+  const baseP = part("base", "Socle : disque PVC Ø 200, 5 mm", 2, "samse", "1");
+  add(baseP, cyl(100, 100, 5, 96), M.plate, [0, 6.5, 0]);
+
+  const unoP = part("uno", "Arduino UNO Q", 2, "deja", "1");
+  {
+    const g = new THREE.Group(); g.position.set(-58, Y0, 6); unoP.group.add(g);
+    add(unoP, box(53, 1.6, 69), M.pcbBlue, [0, 6, 0], [0, 0, 0], true, g);
+    for (const z of [-30, 30]) for (const x of [-22, 22]) add(unoP, cyl(1.6, 1.6, 6, 10), M.steel, [x, 3, z], [0, 0, 0], true, g);
+    add(unoP, box(14, 2, 14), M.dark, [2, 7.8, 6], [0, 0, 0], true, g);
+    add(unoP, box(2.5, 8, 40), M.dark, [-24, 11, 4], [0, 0, 0], true, g);
+    add(unoP, box(2.5, 8, 50), M.dark, [24, 11, 0], [0, 0, 0], true, g);
+  }
+  const breadP = part("bread", "Breadboard + câbles Dupont", 2, "deja", "1");
+  {
+    const g = new THREE.Group(); g.position.set(56, Y0, -10); breadP.group.add(g);
+    add(breadP, box(55, 9, 83), M.bread, [0, 4.5, 0], [0, 0, 0], true, g);
+    add(breadP, box(3, 0.6, 81), M.red, [-23, 9.2, 0], [0, 0, 0], false, g);
+    add(breadP, box(3, 0.6, 81), M.pcbBlue, [23, 9.2, 0], [0, 0, 0], false, g);
+  }
+  const wire = (p, a, b, m, lift = 26) => {
+    const curve = new THREE.CatmullRomCurve3([a, new THREE.Vector3((a.x + b.x) / 2, Math.max(a.y, b.y) + lift, (a.z + b.z) / 2), b]);
+    add(p, new THREE.TubeGeometry(curve, 24, 0.9, 6), m, [0, 0, 0], [0, 0, 0], false);
+  };
+  wire(breadP, new THREE.Vector3(40, Y0 + 9, 10), new THREE.Vector3(-50, Y0 + 14, 30), M.orange, 40);
+  wire(breadP, new THREE.Vector3(60, Y0 + 9, -30), new THREE.Vector3(-70, Y0 + 14, -14), M.yellow, 46);
+  wire(breadP, new THREE.Vector3(30, Y0 + 9, -40), new THREE.Vector3(0, Y0 + 60, -22), M.red, 20);   // vers le pilier (servo, caméra)
+  const mosP = part("mos", "Module MOS (haut-parleur)", 2, "deja", "1");
+  add(mosP, box(25, 1.6, 34), M.pcbRed, [-30, Y0 + 4, -62]);
+  add(mosP, box(16, 10, 10), M.pcbBlue, [-30, Y0 + 10, -71]);
+  const usbP = part("usb", "Câble USB-C 2 m", 2, "web", "1");
+  {
+    const a = onWall(160, 22, 30), b = onWall(160, 22, -2);
+    const curve = new THREE.CatmullRomCurve3([a, b, new THREE.Vector3(-20, Y0 + 26, -70), new THREE.Vector3(-62, Y0 + 9, -26)]);
+    add(usbP, new THREE.TubeGeometry(curve, 48, 2, 8), M.cable, [0, 0, 0], [0, 0, 0], false);
+  }
+  const velcroP = part("velcro", "Scratch, colliers, colle chaude", 2, "action", "—");
+  add(velcroP, box(40, 1, 18), mat(0x303436), [56, Y0 + 0.4, -10]);
+
+  // ---- 3. Pilier : tube PVC Ø 50 avec une fenêtre sur la moitié avant (passage du bras)
+  const R_PIL = 25, PIL_TOP = 192, WIN_LO = 150, WIN_HI = 176;
+  const pillarP = part("pillar", "Pilier : tube PVC Ø 50, 185 mm", 3, "samse", "1", [0, 25, 0]);
+  add(pillarP, ring(R_PIL, R_PIL - 2.2, WIN_LO - Y0, 64), M.pvc, [0, Y0, 0]);
+  add(pillarP, ring(R_PIL, R_PIL - 2.2, WIN_HI - WIN_LO, 48, deg(90), deg(180)), M.pvc, [0, WIN_LO, 0]);  // moitié arrière
+  add(pillarP, ring(R_PIL, R_PIL - 2.2, PIL_TOP - WIN_HI, 64), M.pvc, [0, WIN_HI, 0]);
+  const feetP = part("feet", "3 équerres + vis M3 (pied du pilier)", 3, "samse", "3");
+  for (const t of [0, 120, 240]) {
+    const g = new THREE.Group(); g.rotation.y = deg(t); feetP.group.add(g);
+    add(feetP, box(2, 18, 12), M.steel, [0, Y0 + 9, R_PIL + 1], [0, 0, 0], true, g);
+    add(feetP, box(12, 2, 12), M.steel, [0, Y0 + 1, R_PIL + 7], [0, 0, 0], true, g);
+    g.children.forEach((m) => { m.rotation.y = 0; });
+    g.children[0].rotation.y = deg(90); g.children[1].rotation.y = deg(90);
+  }
+
+  // ---- 4. Servo dans le pilier + bras en L (plat alu)
+  const SHAFT_Y = 160;
+  const servoP = part("servo", "Servo SG90 (dans le pilier)", 4, "deja", "1", [0, 60, 0]);
+  add(servoP, box(12.6, 22.7, 23), M.servo, [0, SHAFT_Y - 16, -6]);
+  add(servoP, box(12.6, 2.5, 32), M.servo, [0, SHAFT_Y - 9, -6]);
+  add(servoP, box(44, 3, 3), M.pvc, [0, SHAFT_Y - 11, -6]);         // traverse qui tient le servo
+  add(servoP, cyl(5.8, 5.8, 4, 24), M.servo, [0, SHAFT_Y - 3.5, 0]);
+  const R_CAM = (R_IN + 78) / 2 + 2;   // milieu de l'anneau plateforme / paroi
+  const armPivot = new THREE.Group(); armPivot.position.set(0, SHAFT_Y, 0);
+  const armP = part("arm", "Bras en L : plat alu 15 × 2", 4, "samse", "1 m", [0, 60, 0]);
+  armP.group.add(armPivot);
+  add(armP, box(15, 2, R_CAM + 4), M.alu, [0, 0, (R_CAM + 4) / 2 - 4], [0, 0, 0], true, armPivot);
+  add(armP, box(15, 64, 2), M.alu, [0, 31, R_CAM + 1], [0, 0, 0], true, armPivot);
+  add(armP, box(22, 2.5, 6), M.white, [0, -1.5, 0], [0, 0, 0], true, armPivot);   // palonnier
+
+  // ---- 5. Caméra au bout du bras, dans l'anneau
+  const camP = part("cam", "ESP32-CAM au bout du bras", 5, "deja", "1", [0, 60, 0]);
+  const camG = new THREE.Group(); armPivot.add(camG);
+  add(camP, box(27, 40, 12), M.pcbBlack, [0, 70, R_CAM + 8], [0, 0, 0], true, camG);
+  add(camP, box(9, 9, 5), M.dark, [0, 80, R_CAM + 16], [0, 0, 0], true, camG);
+  add(camP, cyl(3.5, 3.5, 4, 24), M.lens, [0, 80, R_CAM + 19], [Math.PI / 2, 0, 0], true, camG);
+  {
+    const curve = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 52, R_CAM + 4), new THREE.Vector3(0, 20, R_CAM - 2),
+      new THREE.Vector3(0, 6, R_CAM - 30), new THREE.Vector3(0, 2, 8)]);
+    add(camP, new THREE.TubeGeometry(curve, 30, 1.4, 6), M.red, [0, 0, 0], [0, 0, 0], false, camG);
+  }
+
+  // ---- 6. Capteurs sur la paroi
+  const sensorBoard = (p, theta, y, inset, build) => {
+    const g = new THREE.Group(); g.position.copy(onWall(theta, y, inset)); g.lookAt(onWall(theta, y, 80)); p.group.add(g);
+    build(g);
+  };
+  const usP = part("us", "Capteur à ultrasons (2 trous Ø 16)", 6, "deja", "1");
+  sensorBoard(usP, -35, 55, -12, (g) => {
+    add(usP, box(45, 20, 1.6), M.pcbBlue, [0, 0, -2], [0, 0, 0], true, g);
+    for (const x of [-13, 13]) add(usP, cyl(8, 8, 12, 24), M.alu, [x, 0, 5], [Math.PI / 2, 0, 0], true, g);
+  });
+  const pirP = part("pir", "Détecteur PIR (dôme Ø 23)", 6, "deja", "1");
+  sensorBoard(pirP, -35, 100, -8, (g) => {
+    add(pirP, box(32, 24, 1.6), M.pcbGreen, [0, 0, -3], [0, 0, 0], true, g);
+    add(pirP, new THREE.SphereGeometry(11.5, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2), M.white, [0, 0, 5], [Math.PI / 2, 0, 0], true, g);
+  });
+  const oledP = part("oled", "Écran OLED (fenêtre 26 × 15)", 6, "action", "double face");
+  sensorBoard(oledP, 180, 120, -4.5, (g) => {
+    add(oledP, box(27, 27, 1.6), M.pcbBlue, [0, 0, 0], [0, 0, 0], true, g);
+    add(oledP, box(24, 13, 1), M.dark, [0, 1, 1.2], [0, 0, 0], true, g);
+  });
+  const rfidP = part("rfid", "Lecteur badge RC522 (collé dedans)", 6, "action", "colle chaude");
+  sensorBoard(rfidP, 125, 80, -5, (g) => {
+    add(rfidP, box(40, 60, 1.6), M.pcbBlue, [0, 0, 0], [0, 0, 0], true, g);
+    add(rfidP, new THREE.TorusGeometry(14, 1, 6, 24), M.gold, [0, 6, 1.2], [0, 0, 0], true, g);
+  });
+  const spkP = part("spk", "Haut-parleur (grille de 9 trous)", 6, "deja", "1");
+  sensorBoard(spkP, -110, 80, -9, (g) => {
+    add(spkP, box(40, 70, 6), M.dark, [0, 0, 0], [0, 0, 0], true, g);
+    add(spkP, cyl(14, 9, 3, 32), M.pcbBlack, [0, 0, 3.5], [Math.PI / 2, 0, 0], true, g);
+  });
+  const doorP = part("door", "Capteur de porte HW-201 (sous la plateforme)", 6, "deja", "1");
+  {
+    const g = new THREE.Group(); g.rotation.y = deg(200); doorP.group.add(g);
+    add(doorP, box(14, 1.6, 32), M.pcbBlue, [0, PIL_TOP - 8, R_PIL + 18], [0, 0, 0], true, g);
+    add(doorP, cyl(2.5, 2.5, 5, 12), M.dark, [-4, PIL_TOP - 4.5, R_PIL + 28], [0, 0, 0], true, g);
+    add(doorP, cyl(2.5, 2.5, 5, 12), M.white, [4, PIL_TOP - 4.5, R_PIL + 28], [0, 0, 0], true, g);
+    add(doorP, box(10, 2, 16), M.steel, [0, PIL_TOP - 10, R_PIL + 6], [0, 0, 0], true, g);
+  }
+
+  // ---- 7. Plateforme (coupelle) sur le pilier + mousse + plante
+  const LID = [0, 130, 0];
+  const cupP = part("cup", "Plateforme : soucoupe Ø 156", 7, "action", "1", LID);
+  {
+    const pts = [[0, 0], [70, 0], [78, 30], [76, 30], [68.5, 2.5], [0, 2.5]].map(([x, y]) => new THREE.Vector2(x, y));
+    add(cupP, new THREE.LatheGeometry(pts, 96), M.cup, [0, PIL_TOP, 0]);
+  }
+  const mossP = part("moss", "Mousse décorative", 7, "action", "1 sachet", LID);
+  {
+    const g = new THREE.CircleGeometry(73, 80);
+    const pos = g.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), r = Math.hypot(x, y);
+      const n = Math.sin(x * 0.21) * Math.cos(y * 0.17) + Math.sin((x + y) * 0.09) * 0.8 + Math.random() * 0.8;
+      pos.setZ(i, r < 70 ? 3 + n * 1.6 : 0);
+    }
+    g.computeVertexNormals();
+    const m = add(mossP, g, M.moss, [0, PIL_TOP + 24, 0], [-Math.PI / 2, 0, 0]);
+    m.material.flatShading = true;
+    for (let i = 0; i < 30; i++) {
+      const a = Math.random() * Math.PI * 2, r = 10 + Math.random() * 58;
+      add(mossP, new THREE.IcosahedronGeometry(3 + Math.random() * 3.5, 0), M.moss,
+        [Math.cos(a) * r, PIL_TOP + 26 + Math.random() * 2, Math.sin(a) * r], [Math.random(), Math.random(), 0], false);
+    }
+  }
+  const plantP = part("plant", "Plante artificielle", 7, "action", "1-2", LID);
+  {
+    const base = new THREE.Vector3(0, PIL_TOP + 28, 0);
+    const leafGeo = new THREE.SphereGeometry(1, 16, 8);
+    for (let i = 0; i < 18; i++) {
+      const a = (i / 18) * Math.PI * 2 + Math.random() * 0.3;
+      const tilt = 0.3 + Math.random() * 0.6;
+      const len = 40 + Math.random() * 34;
+      const l = add(plantP, leafGeo, M.leaf);
+      l.scale.set(6, len / 2, 1.3);
+      l.position.set(base.x + Math.cos(a) * 6, base.y + len / 2 * Math.cos(tilt), base.z + Math.sin(a) * 6);
+      l.rotation.set(0, -a, 0); l.rotateZ(-tilt);
+      l.position.x += Math.cos(a) * (len / 2) * Math.sin(tilt);
+      l.position.z += Math.sin(a) * (len / 2) * Math.sin(tilt);
+    }
+  }
+
+  // ------------------------------------------------------------ étapes
+  const STEPS = [
+    { t: "Percer le pot", d: "Foret étagé : 2 × Ø 16 et Ø 23 à l'avant, fenêtre 26 × 15 et passage du câble à l'arrière, 9 petits trous Ø 3 pour le son." },
+    { t: "Socle et électronique", d: "Disque de PVC Ø 200 au fond. UNO Q vissée en M3, breadboard et module MOS au scratch autour du centre, câble USB-C par l'arrière." },
+    { t: "Pilier central", d: "Tube PVC Ø 50 coupé à 185 mm. Fenêtre de 26 mm de haut découpée sur la moitié avant, 10 mm sous le haut. Fixé au socle par 3 équerres." },
+    { t: "Servo et bras", d: "Servo glissé dans le tube, tenu par une traverse, axe au centre. Plat alu plié en L vissé sur le palonnier : il sort par la fenêtre et balaie 180°." },
+    { t: "Caméra", d: "ESP32-CAM collée au bout du bras, objectif vers l'extérieur, juste au-dessus du bord du pot. Ses fils descendent le long du bras puis dans le tube." },
+    { t: "Capteurs sur la paroi", d: "Colle chaude : ultrasons et PIR dans leurs trous, OLED derrière sa fenêtre, RC522 et haut-parleur contre la paroi, HW-201 sous la plateforme." },
+    { t: "Plateforme végétale", d: "Soucoupe collée sur le haut du pilier, remplie de mousse, plante au centre. Le pilier entier se soulève pour ouvrir." },
+  ];
+  let step = 0; // 0 = tout
+  const stepsEl = document.getElementById("steps");
+  STEPS.forEach((s, i) => {
+    const b = document.createElement("button");
+    b.className = "step"; b.type = "button";
+    b.innerHTML = `<span class="n">${i + 1}</span><span><strong>${s.t}</strong><span class="d">${s.d}</span></span>`;
+    b.addEventListener("click", () => setStep(step === i + 1 ? 0 : i + 1));
+    stepsEl.appendChild(b);
+  });
+  document.getElementById("prev").onclick = () => setStep(Math.max(1, (step || 1) - 1));
+  document.getElementById("next").onclick = () => setStep(Math.min(STEPS.length, step + 1));
+  document.getElementById("all").onclick = () => setStep(0);
+
+  const accent = new THREE.Color(0x5fae6a);
+  function setStep(n) {
+    step = n;
+    [...stepsEl.children].forEach((el, i) => { el.classList.toggle("is-on", i + 1 === n); el.setAttribute("aria-pressed", String(i + 1 === n)); });
+    for (const p of parts) {
+      p.group.visible = n === 0 || p.step <= n;
+      const hot = n !== 0 && p.step === n;
+      for (const m of p.mats) { m.emissive = hot ? accent.clone().multiplyScalar(0.28) : new THREE.Color(0); }
+    }
+  }
+
+  // ------------------------------------------------------------ liste des pièces
+  const STORE = { samse: "Samse", action: "Action", deja: "Déjà là", web: "À commander" };
+  const partsEl = document.getElementById("parts");
+  const rowById = {};
+  for (const p of [...parts].sort((a, b) => a.step - b.step)) {
+    const li = document.createElement("li");
+    li.className = "part"; li.tabIndex = 0;
+    li.innerHTML = `<span>${p.name} <span class="q">· ${p.qty}</span></span><span class="tag ${p.store}">${STORE[p.store]}</span>`;
+    li.addEventListener("mouseenter", () => highlight(p.id));
+    li.addEventListener("mouseleave", () => highlight(null));
+    li.addEventListener("focus", () => highlight(p.id));
+    li.addEventListener("blur", () => highlight(null));
+    partsEl.appendChild(li);
+    rowById[p.id] = li;
+  }
+  let hotId = null;
+  function highlight(id) {
+    if (hotId === id) return;
+    if (hotId) { rowById[hotId]?.classList.remove("is-hot"); const p = parts.find((x) => x.id === hotId); p && p.mats.forEach((m) => { m.emissive = m.userData.prevEm || new THREE.Color(0); }); }
+    hotId = id;
+    if (id) {
+      rowById[id]?.classList.add("is-hot");
+      const p = parts.find((x) => x.id === id);
+      p.mats.forEach((m) => { m.userData.prevEm = m.emissive.clone(); m.emissive = new THREE.Color(0xf2b134).multiplyScalar(0.45); });
+    }
+  }
+
+  // ------------------------------------------------------------ boutons
+  const btnCut = document.getElementById("btn-cut");
+  const btnExp = document.getElementById("btn-explode");
+  const btnSpin = document.getElementById("btn-spin");
+  let cut = true, exploded = false, spin = false, explodeT = 0;
+  const potMats = [...potP.mats].slice(0, 2);
+  btnCut.onclick = () => {
+    cut = !cut; btnCut.setAttribute("aria-pressed", String(cut));
+    for (const m of potMats) {
+      m.clippingPlanes = cut ? clips : [];
+      m.transparent = !cut; m.opacity = cut ? 1 : 0.3; m.depthWrite = cut;
+      m.needsUpdate = true;
+    }
+  };
+  const btnSweep = document.getElementById("btn-sweep");
+  let sweep = !reduced, sweepT = 0;
+  btnSweep.setAttribute("aria-pressed", String(sweep));
+  btnSweep.onclick = () => { sweep = !sweep; btnSweep.setAttribute("aria-pressed", String(sweep)); };
+  btnExp.onclick = () => { exploded = !exploded; btnExp.setAttribute("aria-pressed", String(exploded)); };
+  btnSpin.onclick = () => { spin = !spin; btnSpin.setAttribute("aria-pressed", String(spin)); controls.autoRotate = spin; };
+  controls.autoRotateSpeed = 1.2;
+  document.getElementById("btn-reset").onclick = home;
+
+  // ------------------------------------------------------------ survol
+  const ray = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  const nameById = Object.fromEntries(parts.map((p) => [p.id, p.name]));
+  canvas.addEventListener("pointermove", (e) => {
+    const r = canvas.getBoundingClientRect();
+    mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(mouse, camera);
+    const hits = ray.intersectObjects(pickables.filter((m) => m.parent.visible && (m.parent.parent?.visible ?? true)), false)
+      .filter((h) => {
+        if (h.object.userData.part !== "pot" || !cut) return true;
+        const pt = h.point; return !(pt.x > 0 && pt.z > 0);   // quart retiré : on ne survole pas le vide
+      });
+    const id = hits[0]?.object.userData.part || hits[0]?.object.parent.userData?.id;
+    if (id) {
+      tip.hidden = false; tip.textContent = nameById[id];
+      tip.style.left = `${e.clientX - r.left}px`; tip.style.top = `${e.clientY - r.top}px`;
+      if (!rowById[id]?.matches(":hover")) highlight(id);
+    } else { tip.hidden = true; highlight(null); }
+  });
+  canvas.addEventListener("pointerleave", () => { tip.hidden = true; highlight(null); });
+
+  // ------------------------------------------------------------ rendu
+  function resize() {
+    const w = stage.clientWidth, h = stage.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h; camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(stage);
+  resize();
+  setStep(0);
+
+  function tick() {
+    const target = exploded ? 1 : 0;
+    explodeT += (target - explodeT) * (reduced ? 1 : 0.09);
+    const e = explodeT * explodeT * (3 - 2 * explodeT);
+    for (const p of parts) p.group.position.copy(p.explode).multiplyScalar(e);
+    if (sweep) sweepT += 0.012;
+    armPivot.rotation.y = Math.sin(sweepT) * deg(85);   // le SG90 balaie l'avant : −90° à +90°
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(tick);
+  }
+  tick();
+})();
+</script>

@@ -12,7 +12,6 @@ const RANGES: { id: HistoryRange; label: string }[] = [
 const CHARTS: { sensor: HistorySensor; title: string; unit: string; refs: { y: number; label: string }[]; domain: [number | "auto", number | "auto"] }[] = [
   { sensor: "temperature", title: "Température", unit: "°C", refs: [{ y: 26, label: "26 °C" }], domain: ["auto", "auto"] },
   { sensor: "humidity", title: "Humidité", unit: "%", refs: [{ y: 40, label: "40 %" }, { y: 60, label: "60 %" }], domain: [30, 65] },
-  { sensor: "distance", title: "Distance mesurée par les ultrasons", unit: "cm", refs: [{ y: 50, label: "seuil 50 cm" }], domain: [0, 250] },
 ];
 
 export default function Sensors() {

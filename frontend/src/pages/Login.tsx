@@ -20,7 +20,7 @@ export default function Login() {
       <div className="login-hero">
         <Logo3DSlot className="login-logo" />
         <h1 className="login-title">Sentinel</h1>
-        <p className="login-sub">Surveillance discrète, cultivée au cœur de la salle serveur.</p>
+        <p className="login-sub">Surveillance discrète au cœur de la salle serveur.</p>
       </div>
       <form className="login-card" onSubmit={submit}>
         <div className="login-card-head">Connexion</div>
