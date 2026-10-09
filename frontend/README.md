@@ -134,11 +134,11 @@ L'export CSV des journaux neutralise les cellules commençant par `= + - @` (inj
 
 Le tableau de bord s'installe comme une application (icône sur l'écran d'accueil, fenêtre sans barre d'adresse) :
 
-- `public/manifest.webmanifest` : nom, icônes, couleurs, raccourcis Alertes et Caméra ; `start_url` = `/index.html`, servi aussi bien par le déploiement Docker que par l'UNO Q.
+- `public/manifest.json` : nom, icônes, couleurs, raccourcis Alertes et Caméra ; `start_url` = `/index.html`, servi aussi bien par le déploiement Docker que par l'UNO Q.
 - `public/sw.js` : service worker. Pages en réseau d'abord avec copie de secours (l'application s'ouvre hors connexion et affiche la reconnexion), `/assets/` en cache, `/api` et `/ws` jamais mis en cache. Changer `VERSION` pour invalider les pages en cache.
 - `public/icons/` : icônes (192, 512, masquable Android, Apple 180, favicon).
 - `src/pwa.ts` : enregistrement du service worker (production, contexte sécurisé, hors build autonome) et bouton « Installer l'application » dans la barre latérale.
-- nginx (`nginx.conf`, `deploy/uno-q/nginx.conf`) : `sw.js` et le manifeste ne sont jamais mis en cache, le manifeste est servi en `application/manifest+json`.
+- nginx (`nginx.conf`, `deploy/uno-q/nginx.conf`) : `sw.js` et le manifeste ne sont jamais mis en cache. Le manifeste s'appelle `manifest.json` pour être servi en `application/json` par n'importe quel nginx, sans réglage (utile sur l'UNO Q, où la config système demande `sudo`).
 
 Installer :
 

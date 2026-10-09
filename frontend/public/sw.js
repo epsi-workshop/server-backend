@@ -8,11 +8,11 @@
  *
  * Changer VERSION invalide les copies des pages ; les assets se renouvellent seuls (noms hachés).
  */
-const VERSION = "sentinel-v1";
+const VERSION = "sentinel-v2";
 const PAGES = `${VERSION}-pages`;
 const ASSETS = "sentinel-assets";
 const MAX_ASSETS = 80;
-const SHELL = ["/index.html", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/apple-touch-icon.png"];
+const SHELL = ["/index.html", "/manifest.json", "/icons/icon-192.png", "/icons/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(PAGES).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
