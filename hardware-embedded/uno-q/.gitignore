@@ -1,2 +1,8 @@
 __pycache__/
 .venv/
+# Sons générés par audio.py au premier démarrage
+api/sounds/ok.wav
+api/sounds/refused.wav
+api/sounds/hello.wav
+api/sounds/test.wav
+api/sounds/siren.wav
