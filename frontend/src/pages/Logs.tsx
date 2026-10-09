@@ -80,7 +80,7 @@ function Events() {
         <Empty>Aucune entrée ne correspond à ces filtres.</Empty>
       ) : (
         <div className="table-wrap">
-          <table className="table">
+          <table className="table table-stack stack-last-wide">
             <thead><tr><th>Horodatage</th><th>Niveau</th><th>Source</th><th>Message</th></tr></thead>
             <tbody>
               {rows.map((r) => (
@@ -112,7 +112,7 @@ function Audit() {
       action={<button className="btn btn-small" onClick={exportCsv} disabled={!rows?.length}><Download size={15} />Exporter en CSV</button>}>
       {error ? <Empty>Impossible de charger l'audit : {error}</Empty> : !rows ? <Loading /> : (
         <div className="table-wrap">
-          <table className="table">
+          <table className="table table-stack">
             <thead><tr><th>Horodatage</th><th>Utilisateur</th><th>Action</th><th>Adresse IP</th><th>Résultat</th></tr></thead>
             <tbody>
               {rows.map((r) => (

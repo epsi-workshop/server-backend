@@ -15,14 +15,15 @@ export default function Layout() {
   const { openAlerts, state } = useLive();
   const [pwdOpen, setPwdOpen] = useState(false);
   const camLive = !!state && cameraOpen(state.camera);
+  // `short` : libellé de la barre d'onglets en bas de l'écran (mobile).
   const nav = [
-    { to: "/", label: "Vue d'ensemble", icon: LayoutGrid, show: true },
-    { to: "/camera", label: "Caméra", icon: Camera, show: true, badge: camLive ? "en direct" : undefined },
-    { to: "/capteurs", label: "Historique capteurs", icon: Activity, show: true },
-    { to: "/alertes", label: "Alertes", icon: Bell, show: true, count: openAlerts },
-    { to: "/journaux", label: "Journaux", icon: ScrollText, show: can("operateur") },
-    { to: "/admin", label: "Administration", icon: Settings2, show: can("admin") },
-  ];
+    { to: "/", label: "Vue d'ensemble", short: "Accueil", icon: LayoutGrid, show: true },
+    { to: "/camera", label: "Caméra", short: "Caméra", icon: Camera, show: true, badge: camLive ? "en direct" : undefined },
+    { to: "/capteurs", label: "Historique capteurs", short: "Historique", icon: Activity, show: true },
+    { to: "/alertes", label: "Alertes", short: "Alertes", icon: Bell, show: true, count: openAlerts },
+    { to: "/journaux", label: "Journaux", short: "Journaux", icon: ScrollText, show: can("operateur") },
+    { to: "/admin", label: "Administration", short: "Admin", icon: Settings2, show: can("admin") },
+  ].filter((n) => n.show);
   return (
     <div className="shell">
       <aside className="side">
@@ -34,7 +35,7 @@ export default function Layout() {
           </div>
         </div>
         <nav className="nav">
-          {nav.filter((n) => n.show).map((n) => (
+          {nav.map((n) => (
             <NavLink key={n.to} to={n.to} end={n.to === "/"} className={({ isActive }) => (isActive ? "nav-item on" : "nav-item")}>
               <n.icon size={18} aria-hidden="true" />
               <span>{n.label}</span>
@@ -67,6 +68,19 @@ export default function Layout() {
         <Annunciator />
         <div className="page"><Suspense fallback={<Loading />}><Outlet /></Suspense></div>
       </main>
+      {/* Mobile : navigation en bas de l'écran, à portée de pouce */}
+      <nav className="tabbar" aria-label="Navigation principale">
+        {nav.map((n) => (
+          <NavLink key={n.to} to={n.to} end={n.to === "/"} className={({ isActive }) => (isActive ? "tab-item on" : "tab-item")}>
+            <span className="tab-icon">
+              <n.icon size={21} aria-hidden="true" />
+              {!!n.count && <em className="tab-count">{n.count > 99 ? "99+" : n.count}</em>}
+              {n.badge && <em className="tab-live" aria-label={n.badge} />}
+            </span>
+            <span className="tab-label">{n.short}</span>
+          </NavLink>
+        ))}
+      </nav>
       <ChangePasswordDialog open={pwdOpen} onClose={() => setPwdOpen(false)} />
     </div>
   );

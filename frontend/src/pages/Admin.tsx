@@ -91,7 +91,7 @@ function SystemTab() {
       <Panel title="Services du serveur" action={<button className="icon-btn" onClick={load} aria-label="Actualiser" title="Actualiser"><RefreshCw size={16} /></button>}>
         {!services ? <Loading /> : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table-stack">
               <thead><tr><th>Service</th><th>État</th><th>Démarré depuis</th><th className="num">CPU</th><th className="num">Mémoire</th><th>Version</th><th /></tr></thead>
               <tbody>
                 {services.map((s) => (
@@ -162,7 +162,7 @@ function UsersTab() {
       <Panel title="Comptes">
         {!users ? <Loading /> : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table-stack">
               <thead><tr><th>Identifiant</th><th>Rôle</th><th>Statut</th><th>Dernière connexion</th><th /></tr></thead>
               <tbody>
                 {users.map((u) => (
@@ -502,7 +502,7 @@ function BadgesTab() {
       <Panel title="Badges autorisés à désarmer">
         {!badges ? <Loading /> : badges.length === 0 ? <Empty>Aucun badge enregistré.</Empty> : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table table-stack">
               <thead><tr><th>UID</th><th>Titulaire</th><th>Statut</th><th>Dernière utilisation</th><th /></tr></thead>
               <tbody>
                 {badges.map((b) => (

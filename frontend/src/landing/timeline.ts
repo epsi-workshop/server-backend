@@ -92,13 +92,14 @@ export function poseAt(stops: Stop[], y: number): Pose {
 /** Écran en portrait : on centre la caméra sur le sujet et on recule pour tout garder dans le cadre. */
 export function adaptToViewport(p: Pose, aspect: number): Pose {
   if (aspect >= 1) return p;
-  const k = Math.min(1.9, 1.15 / aspect);
+  // La partie « système » (repères) recule davantage : citrouille et module doivent tenir en entier.
+  const k = Math.min(2.3, 1.05 / aspect) * (1 + 0.45 * p.inside);
   const focusX = p.devices > 0.5 ? 1.6 * p.devices : p.box[0] + 0.7 * p.access;
   const lookX = p.look[0] + (focusX - p.look[0]) * 0.9;
   return {
     ...p,
-    // Visée abaissée : le sujet remonte dans la moitié haute, les textes occupent le bas de l'écran.
-    look: [lookX, p.look[1] - 1.15, p.look[2]],
+    // Visée abaissée : le sujet remonte dans le tiers haut, les textes occupent le bas de l'écran.
+    look: [lookX, p.look[1] - 1.9, p.look[2]],
     cam: [lookX + (p.cam[0] - p.look[0]), p.cam[1] - 0.6, p.cam[2] * k],
   };
 }

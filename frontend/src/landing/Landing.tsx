@@ -56,8 +56,8 @@ export default function Landing() {
           <Shield /> Sentinel
         </a>
         <div className="lp-top-actions">
-          <button className={`lp-btn lp-btn-ghost lp-demo ${demo ? "on" : ""}`} data-demo-toggle onClick={() => setDemo((v) => !v)} aria-pressed={demo}>
-            {demo ? <><Pause size={15} /> Arrêter la démo</> : <><Play size={15} /> Mode démo</>}
+          <button className={`lp-btn lp-btn-ghost lp-demo ${demo ? "on" : ""}`} data-demo-toggle onClick={() => setDemo((v) => !v)} aria-pressed={demo} aria-label={demo ? "Arrêter la démo" : "Mode démo"}>
+            {demo ? <><Pause size={15} /><span className="lp-btn-text">Arrêter la démo</span></> : <><Play size={15} /><span className="lp-btn-text">Mode démo</span></>}
           </button>
           <a className="lp-btn lp-btn-ghost" href={DASHBOARD_URL}>Tableau de bord <ArrowRight size={16} /></a>
         </div>

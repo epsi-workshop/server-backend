@@ -64,7 +64,7 @@ export default function Sensors() {
                     <CartesianGrid stroke="var(--line)" strokeDasharray="2 4" vertical={false} />
                     <XAxis dataKey="ts" tickFormatter={tick} minTickGap={48} stroke="var(--muted)" fontSize={12} tickLine={false} axisLine={false} />
                     <YAxis domain={c.domain} stroke="var(--muted)" fontSize={12} tickLine={false} axisLine={false} width={48}
-                      tickFormatter={(v: number) => `${fmtNum(v, 0)}`} />
+                      tickFormatter={(v: number) => fmtNum(v, Number.isInteger(v) ? 0 : 1)} />
                     <Tooltip
                       contentStyle={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 6, color: "var(--ink)" }}
                       labelFormatter={(ts) => new Date(String(ts)).toLocaleString("fr-FR")}
