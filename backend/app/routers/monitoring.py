@@ -11,7 +11,7 @@ from .. import sound
 from ..config import config
 from ..ingest import SNAPSHOT_RE
 from ..convert import to_alert, to_audit, to_log
-from ..db import AlertRow, AuditRow, LogRow
+from ..db import AlertRow, AuditRow, LogRow, events
 from ..deps import Admin, Db, Lecteur, Operateur, client_ip
 from ..hub import hub
 from ..journal import write_audit, write_log
@@ -57,11 +57,15 @@ async def get_alerts(_: Lecteur, db: Db) -> list[Alert]:
 
 @router.get("/snapshots/{name}")
 async def get_snapshot(name: str, _: Lecteur, db: Db) -> FileResponse:
-    """Capture d'une alerte. Seules les captures rattachées à une alerte sont servies : les autres
+    """Capture d'une alerte ou d'un visage vu par la caméra (bandeau « Bonjour … » / « Intrus »). Les autres
     images du volume (mouvements sans alerte) restent inaccessibles depuis le dashboard."""
     if not SNAPSHOT_RE.fullmatch(name):
         raise HTTPException(404, "Capture introuvable.")
     linked = (await db.execute(select(AlertRow.id).where(AlertRow.snapshot_path == name).limit(1))).first()
+    if not linked and name.startswith("face-"):
+        linked = (await db.execute(select(events.c.time).where(
+            events.c.type.in_(("face_known", "face_unknown")), events.c.data["snapshot"].astext == name,
+        ).limit(1))).first()
     path = config.snapshot_dir / name
     if not linked or not path.is_file():
         raise HTTPException(404, "Capture introuvable.")
