@@ -1,9 +1,14 @@
 """Enceinte Bluetooth : appairage (bluetoothctl), lecture des sons (PipeWire) et reconnexion automatique.
 
 L'enceinte choisie est mémorisée dans audio.json ; talos s'y reconnecte dès qu'elle est allumée et à portée.
-Les sons (bips, carillon, sirène) sont générés au premier démarrage dans sounds/ ; les messages parlés
-(voice-*.wav) sont produits sur un Mac avec `say` puis copiés (voir sounds/README).
+Les sons (bips, carillon, sirène) sont générés au premier démarrage dans sounds/. Les phrases
+(« Bonjour Léa », « Inconnu détecté »…) sont synthétisées sur la carte par Piper (voix fr_FR-siwis-medium
+dans voices/, hors ligne) et gardées en cache dans sounds/tts/ ; sans Piper, repli sur les voice-*.wav.
+
+Sortie (audio.json, « output ») : wired (haut-parleur du boîtier), bluetooth (enceinte, avec repli sur le
+haut-parleur si elle est absente : une alarme n'est jamais muette), both, off.
 """
+import hashlib
 import json
 import math
 import os
@@ -18,6 +23,9 @@ import wave
 HERE = pathlib.Path(__file__).resolve().parent
 CONFIG = HERE / "audio.json"
 SOUNDS = HERE / "sounds"
+TTS_DIR = SOUNDS / "tts"
+VOICE = HERE / "voices" / "fr_FR-siwis-medium.onnx"
+OUTPUTS = ("wired", "bluetooth", "both", "off")
 RATE = 44100
 RECONNECT_S = 20
 MAC_RE = re.compile(r"^([0-9A-F]{2}:){5}[0-9A-F]{2}$")
@@ -44,13 +52,88 @@ def load_config() -> dict:
     try:
         return json.loads(CONFIG.read_text())
     except (OSError, ValueError):
-        return {"mac": None, "name": None, "volume": 80}
+        return {"mac": None, "name": None, "volume": 80, "output": "both"}
 
 
 def save_config(cfg: dict) -> None:
     tmp = CONFIG.with_suffix(".tmp")
     tmp.write_text(json.dumps(cfg))
     os.replace(tmp, CONFIG)
+
+
+def get_output() -> str:
+    out = load_config().get("output", "both")
+    return out if out in OUTPUTS else "both"
+
+
+def set_output(mode: str) -> dict:
+    if mode not in OUTPUTS:
+        raise AudioError(f"sortie inconnue : {mode}")
+    cfg = load_config()
+    cfg["output"] = mode
+    save_config(cfg)
+    return status()
+
+
+def outputs() -> tuple[bool, bool]:
+    """(enceinte, haut-parleur du boîtier) à utiliser maintenant, repli compris."""
+    mode = get_output()
+    ready = _sink_id(load_config().get("mac")) is not None
+    bluetooth = mode in ("bluetooth", "both") and ready
+    wired = mode in ("wired", "both") or (mode == "bluetooth" and not ready)
+    return bluetooth, wired
+
+
+# ---------------------------------------------------------------- voix (Piper)
+_voice = None
+_voice_lock = threading.Lock()
+
+
+def _load_voice():
+    """Chargement unique (environ 15 s sur la carte) ; None si Piper ou la voix manquent."""
+    global _voice
+    with _voice_lock:
+        if _voice is None and VOICE.exists():
+            try:
+                from piper import PiperVoice
+                _voice = PiperVoice.load(str(VOICE))
+            except Exception:  # noqa: BLE001 (sans voix, on garde les sons courts)
+                _voice = False
+        return _voice or None
+
+
+def say_file(text: str) -> pathlib.Path | None:
+    """Fichier WAV de la phrase, synthétisé une fois puis lu depuis le cache (sounds/tts/)."""
+    text = " ".join(text.split())[:120]
+    if not text:
+        return None
+    path = TTS_DIR / f"{hashlib.sha1(text.encode()).hexdigest()[:16]}.wav"
+    if path.exists():
+        return path
+    voice = _load_voice()
+    if voice is None:
+        return None
+    TTS_DIR.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    with _voice_lock, wave.open(str(tmp), "wb") as w:
+        voice.synthesize_wav(text, w)
+    os.replace(tmp, path)
+    return path
+
+
+PHRASES = {"alarm": "Alerte. Intrusion détectée. L'alarme est déclenchée.", "unknown": "Inconnu détecté.",
+           "hello": "Bonjour {name}.", "test": "Test de l'enceinte."}
+
+
+def prepare(texts: list[str]) -> None:
+    """Synthèse à l'avance, en tâche de fond (phrases fixes au démarrage, « Bonjour <prénom> » à l'ajout)."""
+    def run() -> None:
+        for t in texts:
+            try:
+                say_file(t)
+            except Exception:  # noqa: BLE001
+                pass
+    threading.Thread(target=run, name="tts-prepare", daemon=True).start()
 
 
 # ---------------------------------------------------------------- Bluetooth
@@ -177,20 +260,24 @@ def status() -> dict:
         "speaker": {"mac": cfg["mac"], "name": cfg.get("name"), "connected": bool(dev and dev["connected"])}
         if cfg.get("mac") else None,
         "ready": _sink_id(cfg.get("mac")) is not None,
+        "output": get_output(),
+        "voice": VOICE.exists(),
         "volume": cfg.get("volume", 80),
         "sounds": sorted(p.stem for p in SOUNDS.glob("*.wav")),
     }
 
 
 # ---------------------------------------------------------------- lecture
-# Événements -> sons joués à la suite ; la sirène boucle ensuite pendant `siren` secondes.
+# Événements -> (sons courts, phrase, voix de repli sans Piper, sirène en secondes par défaut)
 EVENTS = {
-    "ok": (["ok", "voice-badge-ok"], 0),
-    "refused": (["refused", "voice-badge-refused"], 0),
-    "hello": (["hello", "voice-bonjour"], 0),
-    "intruder": (["voice-intrus"], 10),
-    "siren": ([], 10),
-    "test": (["test", "voice-test"], 0),
+    "ok": (["ok"], None, None, 0),
+    "refused": (["refused"], None, None, 0),
+    "hello": (["hello"], "hello", "voice-bonjour", 0),
+    "unknown": ([], "unknown", "voice-intrus", 0),
+    "intruder": ([], "unknown", "voice-intrus", 0),
+    "alarm": ([], "alarm", "voice-intrus", 30),
+    "siren": ([], None, None, 10),
+    "test": (["test"], "test", "voice-test", 0),
 }
 
 
@@ -203,13 +290,13 @@ class Player:
         self._siren_until = 0.0
         self._lock = threading.Lock()
 
-    def play(self, event: str, siren_seconds: int | None = None) -> bool:
+    def play(self, event: str, siren_seconds: int | None = None, name: str | None = None) -> bool:
         if event not in EVENTS:
             return False
         sid = _sink_id(load_config().get("mac"))
         if sid is None:
             return False
-        sequence, siren = EVENTS[event]
+        sequence, phrase, fallback, siren = EVENTS[event]
         siren = siren_seconds if siren and siren_seconds else siren
         if not siren and time.monotonic() < self._siren_until:
             return False
@@ -218,7 +305,10 @@ class Player:
         if siren:
             self._siren_until = time.monotonic() + siren + 3
         files = [SOUNDS / f"{n}.wav" for n in sequence]
-        threading.Thread(target=self._run, args=([f for f in files if f.exists()], sid, siren, stop),
+        text = PHRASES[phrase].format(name=name or "").replace(" .", ".") if phrase else None
+        if phrase == "hello" and not name:
+            text = "Bonjour."
+        threading.Thread(target=self._run, args=([f for f in files if f.exists()], sid, siren, stop, text, fallback),
                          daemon=True).start()
         return True
 
@@ -228,7 +318,17 @@ class Player:
                                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self._proc.wait()
 
-    def _run(self, files: list[pathlib.Path], sid: int, siren: int, stop: threading.Event) -> None:
+    def _run(self, files: list[pathlib.Path], sid: int, siren: int, stop: threading.Event,
+             text: str | None = None, fallback: str | None = None) -> None:
+        if text:  # synthèse ici, pas dans la requête : environ 1 s la première fois
+            try:
+                voice = say_file(text)
+            except Exception:  # noqa: BLE001
+                voice = None
+            if voice is None and fallback and (SOUNDS / f"{fallback}.wav").exists():
+                voice = SOUNDS / f"{fallback}.wav"
+            if voice:
+                files = files + [voice]
         for f in files:
             if stop.is_set():
                 return

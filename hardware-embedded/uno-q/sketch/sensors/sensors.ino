@@ -55,7 +55,11 @@ static void playNote(int freq, int ms) {
   sndNoteEnd = millis() + ms;
 }
 
+// Haut-parleur du boîtier autorisé ou non (sortie choisie dans le dashboard : enceinte seule = coupé)
+volatile int speakerOn = 1;
+
 int play_sound(int pattern, int seconds) {
+  if (!speakerOn) return 0;
   soundStop();
   soundPattern = pattern;
   switch (pattern) {
@@ -71,6 +75,11 @@ int play_sound(int pattern, int seconds) {
   return pattern;
 }
 int stop_sound()  { soundStop(); return 0; }
+int set_speaker(int on) {
+  speakerOn = on ? 1 : 0;
+  if (!speakerOn) soundStop();
+  return speakerOn;
+}
 int get_sound()   { return soundPattern; }
 
 static void soundUpdate() {
@@ -502,6 +511,7 @@ void setup() {
   Bridge.provide_safe("show_badge", show_badge);
   Bridge.provide_safe("play_sound", play_sound);
   Bridge.provide_safe("stop_sound", stop_sound);
+  Bridge.provide_safe("set_speaker", set_speaker);
   Bridge.provide("get_sound", get_sound);
   Bridge.provide_safe("run_motor", run_motor);
   Bridge.provide_safe("move_motor", move_motor);

@@ -6,3 +6,6 @@ api/sounds/refused.wav
 api/sounds/hello.wav
 api/sounds/test.wav
 api/sounds/siren.wav
+api/voices/
+api/sounds/tts/
+api/audio.json

@@ -29,6 +29,9 @@ import audio
 async def lifespan(app):
     audio.generate_sounds()
     threading.Thread(target=audio.reconnect_loop, name="bt-reconnect", daemon=True).start()
+    apply_speaker()
+    # Voix chargée et phrases fixes synthétisées en tâche de fond (environ 20 s au démarrage)
+    audio.prepare([audio.PHRASES[k] for k in ("alarm", "unknown", "test")] + ["Bonjour."])
     await pir_broadcaster.start()
     yield
     await pir_broadcaster.stop()
@@ -37,7 +40,7 @@ async def lifespan(app):
 
 app = FastAPI(title="UNO Q Sensor API", version="0.3.0", lifespan=lifespan)
 # Autorise les dashboards servis depuis une autre origine (autre PC du réseau)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "DELETE"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "PUT", "DELETE"], allow_headers=["*"])
 START = time.time()
 
 
@@ -286,15 +289,28 @@ class DisplayBadge(BaseModel):
 @app.post("/display/badge")
 def display_badge(msg: DisplayBadge):
     """Décision du backend pour un badge, affichée sur l'écran OLED."""
+    bluetooth = apply_speaker()  # le sketch joue lui-même le bip filaire, s'il est autorisé
     try:
         call("show_badge", BADGE_RESULTS[msg.result], msg.uid.upper(), msg.name.upper(), int(msg.armed), msg.seconds)
     except (BridgeError, OSError) as e:
         raise HTTPException(503, f"microcontrôleur injoignable via le Bridge : {e}")
-    audio.player.play({"ok": "ok", "refused": "refused", "enroll": "test"}[msg.result])
+    if bluetooth:
+        audio.player.play({"ok": "ok", "refused": "refused", "enroll": "test"}[msg.result])
     return msg
 
 
-SOUNDS = {"ok": 1, "refused": 2, "hello": 3, "siren": 4, "test": 5}
+# Motifs du haut-parleur du boîtier (sketch) pour chaque son
+SOUNDS = {"ok": 1, "refused": 2, "hello": 3, "siren": 4, "test": 5, "alarm": 4, "unknown": 2}
+
+
+def apply_speaker() -> bool:
+    """Autorise ou coupe le haut-parleur du boîtier selon la sortie choisie ; renvoie True si l'enceinte joue."""
+    bluetooth, wired = audio.outputs()
+    try:
+        call("set_speaker", int(wired))
+    except (BridgeError, OSError):
+        pass
+    return bluetooth
 
 
 MOTOR_MAX_MS = 30000
@@ -358,17 +374,24 @@ def sound_stop():
 
 @app.post("/sound/{name}")
 def sound_play(
-    name: str = Path(..., pattern="^(ok|refused|hello|siren|test)$", description="ok, refused, hello, siren ou test"),
-    seconds: int = Query(10, ge=1, le=120, description="Durée de la sirène"),
+    name: str = Path(..., pattern="^(ok|refused|hello|siren|test|alarm|unknown)$",
+                     description="ok, refused, hello, siren, test, alarm ou unknown"),
+    seconds: int = Query(10, ge=1, le=120, description="Durée de la sirène (siren, alarm)"),
+    who: str = Query("", alias="name", max_length=32, description="Prénom pour hello : « Bonjour <prénom> »"),
 ):
-    """Joue un son sur le haut-parleur (D5, module MOS) et sur l'enceinte Bluetooth si elle est connectée."""
-    bluetooth = audio.player.play(name, seconds)
-    try:
-        call("play_sound", SOUNDS[name], seconds)
-    except (BridgeError, OSError) as e:
-        if not bluetooth:
-            raise HTTPException(503, f"microcontrôleur injoignable via le Bridge : {e}")
-    return {"playing": name, "seconds": seconds if name == "siren" else None, "bluetooth": bluetooth}
+    """Joue un son sur la sortie choisie (enceinte et/ou haut-parleur du boîtier, voir /audio/output)."""
+    bluetooth = apply_speaker()
+    _, wired = audio.outputs()
+    if bluetooth:
+        audio.player.play(name, seconds, who or None)
+    if wired:
+        try:
+            call("play_sound", SOUNDS[name], seconds)
+        except (BridgeError, OSError) as e:
+            if not bluetooth:
+                raise HTTPException(503, f"microcontrôleur injoignable via le Bridge : {e}")
+    return {"playing": name, "seconds": seconds if name in ("siren", "alarm") else None,
+            "bluetooth": bluetooth, "wired": wired}
 
 
 # ---------------------------------------------------------------- enceinte Bluetooth
@@ -413,6 +436,30 @@ def audio_forget():
     return _audio(audio.forget)
 
 
+@app.get("/audio/output")
+def audio_output():
+    return {"output": audio.get_output()}
+
+
+@app.put("/audio/output/{mode}")
+def audio_set_output(mode: str = Path(..., pattern="^(wired|bluetooth|both|off)$",
+                                      description="wired, bluetooth (repli sur le boîtier), both ou off")):
+    state = _audio(audio.set_output, mode)
+    apply_speaker()
+    return state
+
+
+class VoicePrepare(BaseModel):
+    texts: list[str] = Field(..., max_length=20)
+
+
+@app.post("/audio/voice/prepare")
+def audio_voice_prepare(body: VoicePrepare):
+    """Synthétise les phrases à l'avance (en tâche de fond), ex. « Bonjour Léa » à l'ajout d'un membre."""
+    audio.prepare([t[:120] for t in body.texts])
+    return {"queued": len(body.texts)}
+
+
 @app.post("/audio/volume/{pct}")
 def audio_volume(pct: int = Path(..., ge=0, le=100)):
     return _audio(audio.set_volume, pct)
@@ -421,11 +468,13 @@ def audio_volume(pct: int = Path(..., ge=0, le=100)):
 @app.post("/display/face")
 def display_face(msg: DisplayFace):
     """Résultat de la reconnaissance faciale (service vision), affiché par-dessus l'écran de surveillance."""
+    bluetooth = apply_speaker()  # le sketch joue lui-même le son filaire, s'il est autorisé
     try:
         call("show_face", FACE_KINDS[msg.kind], msg.name.upper(), msg.seconds)
     except (BridgeError, OSError) as e:
         raise HTTPException(503, f"microcontrôleur injoignable via le Bridge : {e}")
-    audio.player.play("hello" if msg.kind == "known" else "intruder")
+    if bluetooth:
+        audio.player.play("hello", name=msg.name) if msg.kind == "known" else audio.player.play("unknown")
     return {"kind": msg.kind, "name": msg.name.upper(), "seconds": msg.seconds}
 
 
