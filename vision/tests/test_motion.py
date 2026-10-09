@@ -59,3 +59,13 @@ def test_split_jpegs() -> None:
     a = b"\xff\xd8A\xff\xd9"
     frames, rest = split_jpegs(b"--x\r\n\r\n" + a + b"\r\n--x\r\n\r\n\xff\xd8B")
     assert frames == [a] and rest == b"\xff\xd8B"
+
+
+def test_latest_frame_drops_stale_images():
+    from vision.source import LatestFrame
+    latest = LatestFrame()
+    for jpeg in (b"1", b"2", b"3"):
+        latest.put(jpeg)
+    assert latest.take() == b"3"
+    assert latest.dropped == 2
+    assert latest.take(timeout=0.01) is None
