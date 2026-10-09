@@ -34,6 +34,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 const get = <T>(p: string) => req<T>("GET", p);
 const post = <T>(p: string, b?: unknown) => req<T>("POST", p, b ?? {});
 const patch = <T>(p: string, b: unknown) => req<T>("PATCH", p, b);
+const put = <T>(p: string, b: unknown) => req<T>("PUT", p, b);
 const del = (p: string) => req<void>("DELETE", p);
 const seg = encodeURIComponent;
 
@@ -150,6 +151,8 @@ export const liveApi: Api = {
   setVolume: (pct) => post(`/api/audio/volume/${Math.round(pct)}`, {}),
   playSound: (s) => post(`/api/audio/sound/${s}`, {}),
   stopSound: () => post("/api/audio/stop", {}),
+  setOutput: (mode) => put("/api/audio/output", { mode }),
+  sayHello: (name) => post(`/api/audio/say?name=${encodeURIComponent(name)}`, {}),
 
   getTeam: () => get("/api/team"),
   createMember: (m) => post("/api/team", m),

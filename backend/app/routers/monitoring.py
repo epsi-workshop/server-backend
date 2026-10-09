@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import FileResponse
 from sqlalchemy import select, text
 
+from .. import sound
 from ..config import config
 from ..ingest import SNAPSHOT_RE
 from ..convert import to_alert, to_audit, to_log
@@ -82,6 +83,7 @@ async def ack_alert(alert_id: uuid.UUID, body: AckIn, request: Request, user: Op
 
     out = to_alert(alert)
     hub.broadcast({"type": "alert", "data": dump(out)})
+    sound.stop()  # alerte prise en charge : la sirène s'arrête
     await write_audit(user.username, f"Alerte acquittée : {alert.title}", client_ip(request))
     await write_log("info", "admin", f"Alerte acquittée par {user.username} : {alert.title}")
     return out

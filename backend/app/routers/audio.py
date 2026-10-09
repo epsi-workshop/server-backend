@@ -17,7 +17,13 @@ from ..util import clean
 
 router = APIRouter(prefix="/api/audio", tags=["enceinte"])
 
-Sound = Literal["test", "ok", "refused", "hello", "siren"]
+Sound = Literal["test", "ok", "refused", "hello", "siren", "alarm", "unknown"]
+Output = Literal["wired", "bluetooth", "both", "off"]
+OUTPUT_LABEL = {"wired": "haut-parleur du boîtier", "bluetooth": "enceinte Bluetooth", "both": "les deux", "off": "muet"}
+
+
+class OutputIn(Camel):
+    mode: Output
 
 
 class SpeakerConnectIn(Camel):
@@ -49,6 +55,20 @@ async def _board(method: str, path: str, timeout: float = 10, **kwargs: Any) -> 
 async def get_audio(_: Admin) -> Any:
     """Enceinte mémorisée, connexion, volume."""
     return await _board("GET", "/audio")
+
+
+@router.put("/output")
+async def set_output(body: OutputIn, request: Request, admin: Admin) -> Any:
+    """Sortie des sons : haut-parleur du boîtier, enceinte Bluetooth (repli sur le boîtier si absente), les deux, muet."""
+    state = await _board("PUT", f"/audio/output/{body.mode}")
+    await write_audit(admin.username, f"Sortie sonore : {OUTPUT_LABEL[body.mode]}", client_ip(request))
+    return state
+
+
+@router.post("/say")
+async def say(_: Admin, name: Annotated[str, Query(min_length=1, max_length=32)]) -> Any:
+    """Test : « Bonjour <prénom> », tel que joué pour un visage reconnu."""
+    return await _board("POST", "/sound/hello", timeout=30, params={"name": clean(name, 32)})
 
 
 @router.get("/devices")
@@ -88,8 +108,8 @@ async def set_volume(pct: int, _: Admin) -> Any:
 
 @router.post("/sound/{sound}")
 async def play_sound(sound: Sound, _: Admin, seconds: Annotated[int, Query(ge=1, le=60)] = 5) -> Any:
-    """Test : joue un son sur l'enceinte et le haut-parleur du boîtier (sirène limitée à 60 s)."""
-    return await _board("POST", f"/sound/{sound}", params={"seconds": seconds})
+    """Test : joue un son sur la sortie choisie (sirène et alarme limitées à 60 s)."""
+    return await _board("POST", f"/sound/{sound}", timeout=30, params={"seconds": seconds})
 
 
 @router.post("/stop")

@@ -20,7 +20,7 @@ import httpx
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException
 
-from . import arming, badges
+from . import arming, badges, sound
 from .config import config
 from .ingest import Envelope, box_event, box_heartbeat, box_telemetry
 from .journal import write_log
@@ -106,6 +106,12 @@ class SensorApi:
                 (await client.post(f"{ROUTE_ARMED}/{'on' if armed else 'off'}")).raise_for_status()
         except httpx.HTTPError as e:
             await write_log("warn", "boitier", f"Armement non transmis à l'UNO Q : {type(e).__name__}")
+
+    async def post(self, path: str, params: dict[str, Any] | None, body: dict[str, Any] | None) -> None:
+        """Requête vers l'API capteurs (sons) ; une erreur HTTP est levée pour être journalisée."""
+        async with httpx.AsyncClient(base_url=self.base_url, timeout=TIMEOUT,
+                                     transport=httpx.AsyncHTTPTransport(local_address=IPV4_ONLY)) as client:
+            (await client.post(path, params=params, json=body)).raise_for_status()
 
     async def push_badge(self, result: str, uid: str, name: str | None) -> None:
         """Résultat d'un passage de badge sur l'écran OLED : accepté, refusé ou lu pour enregistrement."""
@@ -218,3 +224,4 @@ sensor_api = SensorApi(config.sensor_api_url) if config.sensor_api_url else None
 if sensor_api:
     arming.hooks.append(sensor_api.push_armed)
     badges.hooks.append(sensor_api.push_badge)
+    sound.senders.append(sensor_api.post)

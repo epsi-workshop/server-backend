@@ -9,6 +9,7 @@ from fastapi.concurrency import run_in_threadpool
 from sqlalchemy import delete, select
 
 from .. import badges as badge_reader
+from .. import sound
 from ..convert import to_badge, to_member, to_user
 from ..db import BadgeRow, SessionRow, SettingsRow, TeamMemberRow, UserRow, apply_retention
 from ..deps import Admin, Db, client_ip
@@ -219,6 +220,7 @@ async def create_member(body: TeamMemberCreate, request: Request, admin: Admin, 
     db.add(member)
     await db.commit()
     await sync_gallery(db)
+    sound.prepare_voice(f"Bonjour {member.name}")  # voix prête avant la première reconnaissance
     await write_audit(admin.username, f"Membre de l'équipe ajouté : {member.name}", client_ip(request))
     return to_member(member)
 
@@ -231,6 +233,7 @@ async def update_member(member_id: uuid.UUID, body: TeamMemberPatch, request: Re
     if body.name is not None and clean(body.name, 32) and clean(body.name, 32) != member.name:
         member.name = clean(body.name, 32)
         changes.append(f"prénom {member.name}")
+        sound.prepare_voice(f"Bonjour {member.name}")
     if body.active is not None and body.active != member.active:
         member.active = body.active
         changes.append("activé" if body.active else "désactivé")

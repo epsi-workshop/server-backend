@@ -1,5 +1,5 @@
 import type {
-  Alert, AudioState, AuditEntry, Badge, BadgeEnrollState, BluetoothDevice, TestSound, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogFilter,
+  Alert, AudioOutput, AudioState, AuditEntry, Badge, BadgeEnrollState, BluetoothDevice, TestSound, TeamMember, HistoryRange, HistorySensor, LiveMessage, LogEntry, LogFilter,
   Point, RestartRequest, ServiceHealth, Settings, SystemState, User,
 } from "../types";
 
@@ -56,6 +56,9 @@ export interface Api {
   setVolume(pct: number): Promise<AudioState>;
   playSound(sound: TestSound): Promise<unknown>;
   stopSound(): Promise<unknown>;
+  setOutput(mode: AudioOutput): Promise<AudioState>;
+  /** Test de la voix jouée pour un visage reconnu : « Bonjour <prénom> ». */
+  sayHello(name: string): Promise<unknown>;
 
   getTeam(): Promise<TeamMember[]>;
   /** photo : image en data URL ; le backend refuse une photo sans visage ou avec plusieurs visages. */

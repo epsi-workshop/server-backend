@@ -25,7 +25,7 @@ const users: (User & { password: string })[] = [
 ];
 
 const team: TeamMember[] = [];
-let audio: AudioState = { speaker: null, ready: false, volume: 80, sounds: ["test", "ok", "refused", "hello", "siren"] };
+let audio: AudioState = { output: "both", speaker: null, ready: false, volume: 80, sounds: ["test", "ok", "refused", "hello", "siren"] };
 const btDevices: BluetoothDevice[] = [
   { mac: "04:56:E5:77:94:16", name: "JBL Flip 5", paired: false, connected: false, audio: true },
   { mac: "3C:06:30:2E:73:AE", name: "MacBook Pro", paired: false, connected: false, audio: false },
@@ -664,6 +664,8 @@ export const mockApi: Api = {
   async setVolume(pct) { need("admin"); audio = { ...audio, volume: pct }; return clone(audio); },
   async playSound() { need("admin"); return {}; },
   async stopSound() { need("admin"); return {}; },
+  async setOutput(mode) { need("admin"); audio = { ...audio, output: mode }; auditAdd(`Sortie sonore : ${mode}`); return clone(audio); },
+  async sayHello() { need("admin"); return {}; },
 
   async getTeam() { need("admin"); await wait(); return clone(team); },
   async createMember(m) {

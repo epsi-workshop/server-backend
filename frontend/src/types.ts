@@ -124,8 +124,13 @@ export interface BadgeEnrollState {
   owner: string | null;
 }
 
-/** Enceinte Bluetooth de l'UNO Q. */
+/** Sortie des sons : haut-parleur du boîtier, enceinte Bluetooth (repli sur le boîtier si absente), les deux, muet. */
+export type AudioOutput = "wired" | "bluetooth" | "both" | "off";
+
+/** Sortie sonore et enceinte Bluetooth de l'UNO Q. */
 export interface AudioState {
+  /** Absent sur une carte pas encore mise à jour (équivaut à « both »). */
+  output?: AudioOutput;
   speaker: { mac: string; name: string | null; connected: boolean } | null;
   /** Enceinte connectée et prête à jouer (sortie audio créée). */
   ready: boolean;
@@ -142,7 +147,7 @@ export interface BluetoothDevice {
   audio: boolean;
 }
 
-export type TestSound = "test" | "ok" | "refused" | "hello" | "siren";
+export type TestSound = "test" | "ok" | "refused" | "hello" | "siren" | "alarm" | "unknown";
 
 export interface Badge {
   id: string;

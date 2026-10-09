@@ -3,7 +3,7 @@ import { BellRing, Bluetooth, Camera, ImagePlus, Nfc, Search, Volume2, VolumeX, 
 import { api } from "../api";
 import { useAuth, useLive, useToast } from "../store";
 import { Confirm, Dot, Empty, Loading, Panel, Tabs } from "../components/ui";
-import type { AudioState, Badge, BadgeEnrollState, BluetoothDevice, TestSound, RestartRequest, Role, ServiceHealth, Settings, TeamMember, User } from "../types";
+import type { AudioOutput, AudioState, Badge, BadgeEnrollState, BluetoothDevice, TestSound, RestartRequest, Role, ServiceHealth, Settings, TeamMember, User } from "../types";
 import { ROLE_LABEL, ago, errMsg, fmtDuration, fmtNum } from "../util";
 
 type Tab = "systeme" | "utilisateurs" | "equipe" | "badges" | "son" | "detection";
@@ -317,9 +317,19 @@ function TeamTab() {
 
 // ---------------------------------------------------------------- Son (enceinte Bluetooth)
 const SOUND_TESTS: { id: TestSound; label: string }[] = [
-  { id: "test", label: "Test" }, { id: "ok", label: "Badge accepté" }, { id: "refused", label: "Badge refusé" },
-  { id: "hello", label: "Bienvenue" }, { id: "siren", label: "Sirène 5 s" },
+  { id: "ok", label: "Bip badge" }, { id: "refused", label: "Badge refusé" },
+  { id: "unknown", label: "Inconnu détecté" }, { id: "alarm", label: "Alarme 5 s" },
 ];
+const OUTPUTS: { id: AudioOutput; label: string }[] = [
+  { id: "wired", label: "Haut-parleur du boîtier" }, { id: "bluetooth", label: "Enceinte Bluetooth" },
+  { id: "both", label: "Les deux" }, { id: "off", label: "Muet" },
+];
+const OUTPUT_HINT: Record<AudioOutput, string> = {
+  wired: "Bips et sirène sur le petit haut-parleur du boîtier (pas de voix).",
+  bluetooth: "Voix et sirène sur l'enceinte. Enceinte éteinte ou hors de portée : le haut-parleur du boîtier prend le relais.",
+  both: "Voix et sirène sur l'enceinte, bips en même temps sur le haut-parleur du boîtier.",
+  off: "Aucun son, alarme comprise. L'écran et le dashboard continuent d'alerter.",
+};
 
 function SoundTab() {
   const toast = useToast();
@@ -328,6 +338,8 @@ function SoundTab() {
   const [busy, setBusy] = useState<string | null>(null);  // action en cours (recherche, connexion…)
   const [manual, setManual] = useState("");
   const [volume, setVolume] = useState(80);
+  const [helloName, setHelloName] = useState("Victor");
+  useEffect(() => { api.getTeam().then((t) => { if (t[0]) setHelloName(t[0].name); }).catch(() => {}); }, []);
   const load = useCallback(() => api.getAudio().then((a) => { setAudio(a); setVolume(a.volume); })
     .catch((e) => toast(errMsg(e), "err")), [toast]);
   useEffect(() => { load(); }, [load]);
@@ -340,8 +352,29 @@ function SoundTab() {
     run(`connect:${target.mac ?? target.name}`, async () => { setAudio(await api.connectSpeaker(target)); setDevices(null); }, `${label} connectée`);
   const sp = audio?.speaker;
 
+  const output = audio?.output ?? "both";
   return (
     <>
+      <Panel title="Sortie sonore">
+        {!audio ? <Loading /> : (
+          <>
+            <Tabs value={output} items={OUTPUTS}
+              onChange={(mode) => run(`out:${mode}`, async () => setAudio(await api.setOutput(mode)), `Sortie : ${OUTPUTS.find((o) => o.id === mode)!.label}`)} />
+            <p className="muted small">{OUTPUT_HINT[output]}</p>
+            {output !== "off" && (
+              <div className="sound-tests">
+                {SOUND_TESTS.map((t) => (
+                  <button key={t.id} className="btn" disabled={!!busy} onClick={() => run(`play:${t.id}`, () => api.playSound(t.id))}><Volume2 size={15} />{t.label}</button>
+                ))}
+                <button className="btn" disabled={!!busy} onClick={() => run("hello", () => api.sayHello(helloName))}><Volume2 size={15} />Bonjour {helloName}</button>
+                <button className="btn btn-danger" onClick={() => run("stop", () => api.stopSound(), "Son coupé")}><VolumeX size={15} />Couper</button>
+              </div>
+            )}
+            <p className="muted small">Sons automatiques : bip à chaque badge, « Bonjour + prénom » pour un visage reconnu, « Inconnu détecté » pour un visage inconnu, voix et sirène 30 s au niveau d'alerte critique (coupée à l'acquittement).</p>
+          </>
+        )}
+      </Panel>
+
       <Panel title="Enceinte Bluetooth">
         {!audio ? <Loading /> : (
           <div className="speaker-state">
@@ -370,12 +403,6 @@ function SoundTab() {
               <input type="range" min={0} max={100} step={5} value={volume} onChange={(e) => setVolume(Number(e.target.value))}
                 onPointerUp={() => run("vol", async () => setAudio(await api.setVolume(volume)))}
                 onKeyUp={() => run("vol", async () => setAudio(await api.setVolume(volume)))} /></label>
-            <div className="sound-tests">
-              {SOUND_TESTS.map((t) => (
-                <button key={t.id} className="btn" onClick={() => run(`play:${t.id}`, () => api.playSound(t.id))}><Volume2 size={15} />{t.label}</button>
-              ))}
-              <button className="btn btn-danger" onClick={() => run("stop", () => api.stopSound(), "Son coupé")}><VolumeX size={15} />Couper</button>
-            </div>
           </>
         )}
       </Panel>
