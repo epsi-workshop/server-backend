@@ -484,3 +484,6 @@ textarea { resize: vertical; }
 .bt-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-s); background: var(--surface-2); }
 .bt-list li > div { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
 .bt-list li.is-other { opacity: .6; }
+
+.say-test { display: inline-flex; gap: 6px; align-items: center; }
+.say-test input { width: 9rem; }

@@ -184,6 +184,8 @@ async def sync_gallery(db: Db) -> None:
     rows = (await db.execute(select(TeamMemberRow).where(TeamMemberRow.active))).scalars()
     members = [{"id": str(m.id), "name": m.name, "embedding": m.embedding} for m in rows]
     await run_in_threadpool(write_gallery, members)
+    if members:  # « Bonjour <prénom> » synthétisé à l'avance pour chaque membre : instantané à la reconnaissance
+        sound.prepare_voice(*(f"Bonjour {m['name']}." for m in members))
 
 
 async def _get_member(db: Db, member_id: uuid.UUID) -> TeamMemberRow:
@@ -220,7 +222,6 @@ async def create_member(body: TeamMemberCreate, request: Request, admin: Admin, 
     db.add(member)
     await db.commit()
     await sync_gallery(db)
-    sound.prepare_voice(f"Bonjour {member.name}")  # voix prête avant la première reconnaissance
     await write_audit(admin.username, f"Membre de l'équipe ajouté : {member.name}", client_ip(request))
     return to_member(member)
 
@@ -233,7 +234,6 @@ async def update_member(member_id: uuid.UUID, body: TeamMemberPatch, request: Re
     if body.name is not None and clean(body.name, 32) and clean(body.name, 32) != member.name:
         member.name = clean(body.name, 32)
         changes.append(f"prénom {member.name}")
-        sound.prepare_voice(f"Bonjour {member.name}")
     if body.active is not None and body.active != member.active:
         member.active = body.active
         changes.append("activé" if body.active else "désactivé")

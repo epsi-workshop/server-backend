@@ -277,6 +277,8 @@ function TeamTab() {
                     <span>{m.active ? "Reconnu" : "Ignoré"}</span>
                   </label>
                 </div>
+                <button className="icon-btn" aria-label={`Faire dire « Bonjour ${m.name} »`} title={`Tester « Bonjour ${m.name} »`}
+                  onClick={() => api.sayHello(m.name).then(() => toast(`« Bonjour ${m.name} » envoyé au boîtier`)).catch((e) => toast(errMsg(e), "err"))}><Volume2 size={16} /></button>
                 <button className="icon-btn danger" aria-label={`Supprimer ${m.name}`} title="Supprimer" onClick={() => setToDelete(m)}><Trash2 size={16} /></button>
               </li>
             ))}
@@ -338,8 +340,9 @@ function SoundTab() {
   const [busy, setBusy] = useState<string | null>(null);  // action en cours (recherche, connexion…)
   const [manual, setManual] = useState("");
   const [volume, setVolume] = useState(80);
-  const [helloName, setHelloName] = useState("Victor");
-  useEffect(() => { api.getTeam().then((t) => { if (t[0]) setHelloName(t[0].name); }).catch(() => {}); }, []);
+  const [helloName, setHelloName] = useState("");
+  const [team, setTeam] = useState<TeamMember[]>([]);
+  useEffect(() => { api.getTeam().then((t) => { setTeam(t); if (t[0]) setHelloName(t[0].name); }).catch(() => {}); }, []);
   const load = useCallback(() => api.getAudio().then((a) => { setAudio(a); setVolume(a.volume); })
     .catch((e) => toast(errMsg(e), "err")), [toast]);
   useEffect(() => { load(); }, [load]);
@@ -366,7 +369,11 @@ function SoundTab() {
                 {SOUND_TESTS.map((t) => (
                   <button key={t.id} className="btn" disabled={!!busy} onClick={() => run(`play:${t.id}`, () => api.playSound(t.id))}><Volume2 size={15} />{t.label}</button>
                 ))}
-                <button className="btn" disabled={!!busy} onClick={() => run("hello", () => api.sayHello(helloName))}><Volume2 size={15} />Bonjour {helloName}</button>
+                <span className="say-test">
+                  <input list="hello-names" placeholder="Prénom" maxLength={32} value={helloName} onChange={(e) => setHelloName(e.target.value)} aria-label="Prénom à saluer" />
+                  <datalist id="hello-names">{team.map((m) => <option key={m.id} value={m.name} />)}</datalist>
+                  <button className="btn" disabled={!!busy || !helloName.trim()} onClick={() => run("hello", () => api.sayHello(helloName.trim()))}><Volume2 size={15} />Bonjour {helloName.trim() || "…"}</button>
+                </span>
                 <button className="btn btn-danger" onClick={() => run("stop", () => api.stopSound(), "Son coupé")}><VolumeX size={15} />Couper</button>
               </div>
             )}

@@ -14,7 +14,8 @@ install -d -o arduino -g arduino "$U"
 printf 'wireplumber.profiles = {\n  main = {\n    monitor.bluez.seat-monitoring = disabled\n  }\n}\n' > "$U/51-bluez-sans-ecran.conf"
 chown arduino:arduino "$U/51-bluez-sans-ecran.conf"
 
-systemctl restart lightdm
+# Le PipeWire de lightdm est un service utilisateur (user@<uid>) : redémarrer lightdm ne le relance pas.
+sudo -u lightdm XDG_RUNTIME_DIR=/run/user/$(id -u lightdm) systemctl --user restart wireplumber
 sleep 3
 sudo -u arduino XDG_RUNTIME_DIR=/run/user/$(id -u arduino) systemctl --user restart wireplumber
 echo "OK : éteignez puis rallumez l'enceinte, elle se reconnecte en moins de 30 s."

@@ -272,7 +272,7 @@ def status() -> dict:
 EVENTS = {
     "ok": (["ok"], None, None, 0),
     "refused": (["refused"], None, None, 0),
-    "hello": (["hello"], "hello", "voice-bonjour", 0),
+    "hello": (["hello"], "hello", None, 0),  # pas de repli enregistré : il dit « Bonjour Victor »
     "unknown": ([], "unknown", "voice-intrus", 0),
     "intruder": ([], "unknown", "voice-intrus", 0),
     "alarm": ([], "alarm", "voice-intrus", 30),
